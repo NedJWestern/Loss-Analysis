@@ -1,3 +1,36 @@
+NOTES:
+- not sure how to best to combine data with different wavelength resolutions,
+  currently downsampling to the lowest possible resolution (?)
+
+TODO:
+- see in-text TODOs and xxx
+- add pie charts or waterfall plots for loss analysis
+- move some helper functions to another module?
+- change load functions into pure functions returning dictionaries, then use
+decorators to load attributes?
+- user input for some parameters (eg. wafer thickness)
+- create dependency tree for calculations (QE and IV are almost separate)
+- robust to having missing data?
+- should some methods be converted to in class functions? ie: wl_to_alpha
+- return covariance for every fitting parameter?
+- easily compare different samples
+
+waterfall charts:
+- http://tooblippe.github.io/waterfall/
+- http://pbpython.com/waterfall-chart.html
+
+Coding notes:
+- Q: Why don't the methods to load data return values instead of setting class
+    attributes, doesn't this make this code less reusable?
+    - Ans: These methods are only run once per instance and do not have any
+    feedback, so they are stable. This code should be self contained, so will
+    not be reused elsewhere.
+- Q: Why do the process functions return function objects?
+    - Ans: To make the functions 'pure functions' and more reusable
+
+
+
 notes on package structure:
 http://as.ynchrono.us/2007/12/filesystem-structure-of-python-project_21.html
 https://airbrake.io/blog/python/python-best-practices
+
