@@ -1,0 +1,87 @@
+
+
+            ##### Sample names,                     
+                      Light IV, remeasure YM18-w15-4a
+                       Dark IV, Remeasure ym18-w15-4a
+                      Suns Voc, remeasure YM18-w15-4a
+
+
+            ##### Input errors,                     
+                           Voc,            4.045e-03
+                     Cell Area,            0.000e+00
+                Cell thickness,           -5.263e-02
+
+
+             ##### Reflectance,                     
+          Reflectance filename, example_reflectance.csv
+                           WAR,            3.535e+00
+                       f_metal,            1.069e+00
+                   R_wo_escape,            3.807e+01
+                             R,            4.893e+01
+
+
+                      ##### QE,                     
+                  EQE filename,      example_EQE.txt
+           Monitor Corrections,                   On
+                Chopping Speed,               119.96
+                           Jsc,                36.52
+                  Voltage Bias,                 0.00
+                 Sync Waveform,                Sine 
+                    Light Bias,               0.0 mA
+
+
+                ##### Light IV,                     
+                  EQE filename,  example_lightIV.lgt
+                    Cell Name , remeasure YM18-w15-4a
+                  Measured By ,                 Sisi
+            Cell Area (sqr cm),                  6.9
+               Substrate Type ,               P type
+                         Date ,           21/07/2015
+                         Time ,             11:17 AM
+              Temperature ('C),                 25.0
+                 Concentration,                  1.0
+                           Voc,               0.6309
+                           Isc,              0.26981
+                           Jsc,            0.0391029
+                           Vmp,                0.524
+                           Imp,               0.2408
+                           Jmp,          0.034898551
+                           Eff,                18.29
+                          Pmax,               0.1262
+                            FF,               0.7413
+        Number of Data Samples,                 95.0
+
+
+                ##### Suns Voc,                     
+             Suns-Voc filename, example_sunsVoc.xlsm
+           Apparent Rs (W-cm²),            0.9214187
+                           PFF,            0.7503339
+        Ideality (n)   @ 1 sun,             1.341345
+                   Jmp (A/cm²),           0.03480531
+                 Voc @ 0.1 sun,            0.5265459
+                       Voc (V),            0.6334519
+                   Jo2 (A/cm²),         9.484486e-08
+        Ideality (n) @ 0.1 sun,             2.935565
+                       Vmp (V),            0.5339895
+             Pseudo Efficiency,             18.58567
+                   Jo1 (A/cm²),          3.29671e-13
+            Fitted Rsh (W-cm²),             558.8674
+
+
+                 ##### Dark IV,                     
+                  EQE filename,   example_darkIV.drk
+                     Cell Name, Remeasure ym18-w15-4a
+           Cell Area in sqr cm,                  6.9
+                Substrate Type,               P type
+                   Measured By,                 Sisi
+                          Date,           21/07/2015
+                          Time,             11:17 AM
+                   Temperature,                 25.0
+        Number of Data Samples,                186.0
+        Rshunt in Reverse Bias,              78340.0
+
+
+               ##### Calclated,                     
+                           Rsh,            7.516e+04
+                           Rs1,            2.862e-01
+                           Rs2,            1.943e-01
