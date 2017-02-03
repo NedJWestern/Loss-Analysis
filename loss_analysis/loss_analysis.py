@@ -267,18 +267,14 @@ class Cell(object):
         self.Jloss = Jloss
 
         def plot_refl(ax):
-            ax.fill_between(self.refl_wl, self.refl_wo_escape, self.refl,
-                            facecolor = 'blue')
-            ax.fill_between(self.refl_wl, 0, self.refl_wo_escape,
-                            facecolor = 'green')
+            ax.plot(self.refl_wl, self.refl, '-o')
+            ax.plot(self.refl_wl, self.refl_wo_escape, '-o')
             ax.set_ylabel('Reflectance [%]')
             ax.grid(True)
 
         def plot_refl_QE(ax):
             ax.fill_between(self.refl_wl, 100 - self.refl,
                             100 - self.refl_wo_escape)
-            ax.plot(self.refl_wl, 100 - self.refl_wo_escape, 'o-',
-                    label='w/o escape')
             ax.legend(loc='best')
             # ax.set_ylabel('Reflectance [%]')
             # ax.grid(True)
@@ -309,11 +305,12 @@ class Cell(object):
         self.IQE = 100 * self.EQE / (100 - self.refl)
 
         def plot_EQE(ax):
-            ax.plot(self.QE_wl, self.EQE, '-o', label='EQE')
+            line_EQE = ax.plot(self.QE_wl, self.EQE, '-o', label='EQE')
             ax.set_xlabel('Wavelength [$nm$]')
             ax.set_ylabel('QE [%]')
             ax.legend(loc='best')
             ax.grid(True)
+            return line_EQE     # currently not working
 
         def plot_IQE(ax):
             ax.plot(self.QE_wl, self.IQE, '-o', label='IQE')
@@ -519,7 +516,8 @@ class Cell(object):
         self.plot_EQE(ax_QE)
         self.plot_IQE(ax_QE)
         self.plot_Basore_fit(ax_QE_fit)
-        self.plot_EQE(ax_QE_layered)
+        line_EQE, = self.plot_EQE(ax_QE_layered)
+        line_EQE.set_linestyle('v')
         self.plot_refl_QE(ax_QE_layered)
 
         self.plot_darkIV(ax_darkIV)

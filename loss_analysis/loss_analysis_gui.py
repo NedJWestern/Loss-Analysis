@@ -46,9 +46,9 @@ class Loss_analysis_gui(QWidget):
         self.prev_fullpath_lightIV = os.path.join(example_dir, 'example_lightIV.lgt')
         grid.addWidget(self.label_lightIV, 3, 1)
         self.solar_cell.load_lightIV(self.prev_fullpath_lightIV)
-        self.menu_lightIV = QComboBox()
-        self.menu_lightIV.addItems(['.lgt','.txt'])
-        grid.addWidget(self.menu_lightIV, 3, 2)
+        # self.menu_lightIV = QComboBox()
+        # self.menu_lightIV.addItems(['.lgt','.txt'])
+        # grid.addWidget(self.menu_lightIV, 3, 2)
 
         # suns Voc
         self.btn_sunsVoc = QPushButton("Load suns Voc")
@@ -74,7 +74,7 @@ class Loss_analysis_gui(QWidget):
         grid.addWidget(self.btn_process, 6, 0)
 
         self.setLayout(grid)
-        self.setGeometry(300, 300, 650, 600)
+        self.setGeometry(100, 100, 300, 300)
         self.setWindowTitle('Loss analysis')
         self.show()
 
