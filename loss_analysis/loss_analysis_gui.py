@@ -16,7 +16,10 @@ class Loss_analysis_gui(QWidget):
     def initUI(self):
 
         self.solar_cell = loss_analysis.loss_analysis_handeller()
-        example_dir = os.path.abspath(os.pardir + '/example_cell/')
+
+        path = os.sep.join(os.path.dirname(os.path.realpath(__file__)).split(os.sep)[:-1])
+        example_dir = os.path.join(path, 'example_cell')
+        print(path,example_dir)
         grid = QGridLayout()
         # grid.setSpacing(10)
 
