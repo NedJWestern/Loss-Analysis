@@ -1,10 +1,6 @@
 import numpy as np
-import constants
+from scipy import constants
 from scipy.optimize import curve_fit
-
-# for linear fits
-def line(x, m, b):  # b = yintercept
-    return m * x + b
 
 
 # helper functions ###########################################################
@@ -133,13 +129,13 @@ def fit_Basore(wavelength, IQE, theta=0, wlbounds=(1040, 1100)):
     fit_params = ['Leff']
     # TODO: is this not already a float?
     alpha = wl_to_alpha(wavelength) / float(np.cos(np.radians(theta)))
-    popt, pcov = curve_fit(line, 1. / alpha, 1. / IQE)
+    popt, pcov = np.polyfit(1. / alpha, 1. / IQE,1,cov=True)
 
     vals =  {elem: popt[i] for i, elem in enumerate(fit_params)}
 
     def plot_Basore_fit(ax):
         ax.plot(1. / alpha, 1. / IQE, '-o', label='data')
-        ax.plot(1. / alpha, line(1. / alpha, popt[0], popt[1]),
+        ax.plot(1. / alpha, np.polyval(popt, 1. / alpha),
                 label='fit_Basore')
         ax.set_xlabel('$1/ \\alpha$ [$cm^2$]')
         ax.set_ylabel('$1/IQE$ []')
@@ -184,7 +180,7 @@ def FF_ideal(Voc, Jsc = None, Rs = None, Rsh = None, T=300):
     http://dx.doi.org/10.1016/0379-6787(82)90057-6
     '''
     # Rs -> infty,  Rsh -> 0
-    voc = constants.q * Voc / constants.k / T
+    voc = constants.e * Voc / constants.k / T
     FFo = (voc - np.log(voc + 0.72)) / (voc + 1)
 
     # Rs -> finite,  Rsh -> 0

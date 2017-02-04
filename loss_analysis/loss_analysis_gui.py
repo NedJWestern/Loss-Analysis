@@ -15,7 +15,7 @@ class Loss_analysis_gui(QWidget):
 
     def initUI(self):
 
-        self.solar_cell = loss_analysis.Cell()
+        self.solar_cell = loss_analysis.loss_analysis_handeller()
         example_dir = os.path.abspath(os.pardir + '/example_cell/')
         grid = QGridLayout()
         # grid.setSpacing(10)
@@ -27,7 +27,7 @@ class Loss_analysis_gui(QWidget):
         self.label_refl = QLabel('example_reflectance.csv', self)
         self.prev_fullpath_refl = os.path.join(example_dir, 'example_reflectance.csv')
         grid.addWidget(self.label_refl, 1, 1)
-        self.solar_cell.load_refl(self.prev_fullpath_refl)
+        self.solar_cell.reflection.load(self.prev_fullpath_refl)
 
         # EQE
         self.btn_EQE = QPushButton("Load EQE")
@@ -36,7 +36,7 @@ class Loss_analysis_gui(QWidget):
         self.label_EQE = QLabel('example_EQE.txt', self)
         self.prev_fullpath_EQE = os.path.join(example_dir, 'example_EQE.txt')
         grid.addWidget(self.label_EQE, 2, 1)
-        self.solar_cell.load_EQE(self.prev_fullpath_EQE)
+        self.solar_cell.qe.load(self.prev_fullpath_EQE)
 
         # lightIV
         self.btn_lightIV = QPushButton("Load light IV")
@@ -45,7 +45,7 @@ class Loss_analysis_gui(QWidget):
         self.label_lightIV = QLabel('example_lightIV.lgt', self)
         self.prev_fullpath_lightIV = os.path.join(example_dir, 'example_lightIV.lgt')
         grid.addWidget(self.label_lightIV, 3, 1)
-        self.solar_cell.load_lightIV(self.prev_fullpath_lightIV)
+        self.solar_cell.liv.load(self.prev_fullpath_lightIV)
         # self.menu_lightIV = QComboBox()
         # self.menu_lightIV.addItems(['.lgt','.txt'])
         # grid.addWidget(self.menu_lightIV, 3, 2)
@@ -57,7 +57,7 @@ class Loss_analysis_gui(QWidget):
         self.label_sunsVoc = QLabel('example_sunsVoc.xlsm', self)
         self.prev_fullpath_sunsVoc = os.path.join(example_dir, 'example_sunsVoc.xlsm')
         grid.addWidget(self.label_sunsVoc, 4, 1)
-        self.solar_cell.load_sunsVoc(self.prev_fullpath_sunsVoc)
+        self.solar_cell.sunvoc.load(self.prev_fullpath_sunsVoc)
 
         # darkIV
         self.btn_darkIV = QPushButton("Load dark IV")
@@ -66,7 +66,7 @@ class Loss_analysis_gui(QWidget):
         self.label_darkIV = QLabel('example_darkIV.drk', self)
         self.prev_fullpath_darkIV = os.path.join(example_dir, 'example_darkIV.drk')
         grid.addWidget(self.label_darkIV, 5, 1)
-        self.solar_cell.load_darkIV(self.prev_fullpath_darkIV)
+        self.solar_cell.div.load(self.prev_fullpath_darkIV)
 
         # process all data
         self.btn_process = QPushButton("Process data")
@@ -85,7 +85,7 @@ class Loss_analysis_gui(QWidget):
         self.prev_fullpath_lightIV = full_path
         filename = os.path.basename(full_path)
         self.label_lightIV.setText(filename)
-        self.solar_cell.load_lightIV(full_path)
+        self.solar_cell.liv.load(full_path)
 
     def get_darkIV(self):
         default_dir = os.path.dirname(self.prev_fullpath_darkIV)
@@ -94,7 +94,7 @@ class Loss_analysis_gui(QWidget):
         self.prev_fullpath_darkIV = full_path
         filename = os.path.basename(full_path)
         self.label_darkIV.setText(filename)
-        self.solar_cell.load_darkIV(full_path)
+        self.solar_cell.div.load(full_path)
 
     def get_sunsVoc(self):
         default_dir = os.path.dirname(self.prev_fullpath_sunsVoc)
@@ -103,7 +103,7 @@ class Loss_analysis_gui(QWidget):
         self.prev_fullpath_sunsVoc = full_path
         filename = os.path.basename(full_path)
         self.label_sunsVoc.setText(filename)
-        self.solar_cell.load_sunsVoc(full_path)
+        self.solar_cell.sunvoc.load(full_path)
 
     def get_refl(self):
         default_dir = os.path.dirname(self.prev_fullpath_refl)
@@ -112,7 +112,7 @@ class Loss_analysis_gui(QWidget):
         self.prev_fullpath_refl = full_path
         filename = os.path.basename(full_path)
         self.label_refl.setText(filename)
-        self.solar_cell.load_refl(full_path)
+        self.solar_cell.reflection.load(full_path)
 
     def get_EQE(self):
         default_dir = os.path.dirname(self.prev_fullpath_EQE)
@@ -121,7 +121,7 @@ class Loss_analysis_gui(QWidget):
         self.prev_fullpath_EQE = full_path
         filename = os.path.basename(full_path)
         self.label_EQE.setText(filename)
-        self.solar_cell.load_EQE(full_path)
+        self.solar_cell.qe.load(full_path)
 
     def process_data(self):
         self.solar_cell.process_all()
@@ -130,10 +130,10 @@ if __name__ == '__main__':
 
     logfile = open('traceback_log.txt','w')
     app = QApplication(sys.argv)
-    try:
-        ex = Loss_analysis_gui()
-    except:
-        traceback.print_exc(file=logfile)
+    # try:
+    ex = Loss_analysis_gui()
+    # except:
+        # traceback.print_exc(file=logfile)
 
     ex.show()
     logfile.close()

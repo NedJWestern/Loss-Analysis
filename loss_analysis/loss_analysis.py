@@ -39,72 +39,141 @@ import os
 import re
 from collections import OrderedDict
 import matplotlib.pyplot as plt
-from scipy.optimize import curve_fit
+# from scipy.optimize import curve_fit
 import tkinter as tk
 from tkinter.filedialog import askopenfilename  # remove this?
 # modules for this package
 import analysis     # requires correct current directory, change? xxx
-import constants
-
-# for linear fits
-def line(x, m, b):  # b = yintercept
-    return m * x + b
+from scipy import constants
 
 
-class Cell(object):
+class IV_suns():
+    def __init__(self, cell):
+        self.cell = cell
+        self.filepath = None
+        self.filename = None
+        self.output = None
+        self.V = None
+        self.J = None
+        self.effsuns = None
+        self.params = None
 
-# loading data ###########################################################
+    def process(self):
+        '''Suns Voc calculations'''
 
-    def __init__(self, thickness = 0.019):
-        # cell parameters TODO: update and check
-        self.thickness = thickness  # [cm]
-        self.input_errors = {}
-        self.sample_names = {}
-        self.Rs_1 = None
-        self.Rsh = None
-        # self.AM15G_wl = np.genfromtxt('AM1.5G_spectrum.dat', usecols=(0,),
-        #                               skip_header=1)
-        # self.AM15G_Jph = np.genfromtxt('AM1.5G_spectrum.dat', usecols=(1,),
-        #                                skip_header=1)
-        # self.AM15G_Jph_sum = np.sum(self.AM15G_Jph)
-        # self.alpha_data = np.genfromtxt('Si_alpha_Green_2008.dat', usecols=(0,1),
-                                #    skip_header=1).transpose()
-        T = 300   # make optional input?
-        self.Vth = constants.k * T / constants.q
+        # Ideality factor, TODO: better method?
+        self.m = 1 / self.cell.Vth * self.effsuns \
+        / (np.gradient(self.effsuns) / np.gradient(self.V))
 
-    def load_refl(self, raw_data_file):
-        '''Loads Reflectance data in cell attributes'''
-        self.refl_filepath = raw_data_file
-        self.refl_filename = os.path.basename(raw_data_file)
+    def plot_IV(self,ax):
+        ax.plot(self.V, self.J, '-o', label='suns Voc')
+        ax.set_xlabel('Voltage [$V$]')
+        ax.set_ylabel('Current Density [$A cm^{-2}$]')
+        ax.grid(True)
+        ax.legend(loc='best')
+        ax.set_ylim(ymin=0)
 
-        data_array = np.genfromtxt(raw_data_file, usecols=(0, 1), skip_header=1,
-                                   delimiter=',')
-        self.refl_wl = data_array[:, 0]
-        self.refl = data_array[:, 1]
+    def plot_tau(self,ax):
+        # TODO: trims off some noise, use better method?
+        ax.loglog(self.Dn[5:-5], self.tau_eff[5:-5], '-o',
+                label='Suns Voc')
+        ax.set_xlabel('$\Delta n$ [$cm^{-3}$]')
+        ax.set_ylabel('Current Density [$A cm^{-2}$]')
+        ax.grid(True)
+        ax.legend(loc='best')
+        # ax.set_xlim(xmin=1e11)
 
-    def load_EQE(self, raw_data_file):
-        '''Loads EQE data into cell attributes'''
-        self.EQE_filepath = raw_data_file
-        self.EQE_filename = os.path.basename(raw_data_file)
+    def plot_m(self,ax):
+        # trims some noise at ends of array
+        ax.plot(self.V[10:-5], self.m[10:-5], '-o', label='suns Voc')
+        ax.set_xlabel('Voltage [$V$]')
+        ax.set_ylabel('Ideality Factor []')
+        ax.grid(True)
+        ax.legend(loc='best')
+        ax.set_ylim(ymin=0)
 
-        # the other columns are ignored
-        data_array = np.genfromtxt(raw_data_file, usecols=(0, 1),
-                                   skip_header=1, skip_footer=8)
-        self.QE_wl = data_array[:, 0]
-        self.EQE = data_array[:, 1]
 
-        f = open(raw_data_file, 'r')
-        d = {}
-        for line in f.readlines()[-7:-1]:
-            # d.update(dict(re.findall(r'([\s\S]+)\s*:\s\s([^\n]+)', line)))
-            d.update(dict([line.strip('\n').split(':')]))     # alternative
 
-        self.QE_output = d
+    def load(self, raw_data_file, text_format=False):
+        '''Loads Suns Voc data in cell attributes'''
+        self.filepath = raw_data_file
+        self.filename = os.path.basename(raw_data_file)
 
-    def load_lightIV(self, raw_data_file):
+        if text_format:
+            data_array = np.genfromtxt(raw_data_file, usecols=(0, 1, 2, 3, 4),
+                                       skip_header=1)
+        else:
+            wb = openpyxl.load_workbook(raw_data_file, read_only=True,
+                                        data_only=True)
+            ws_RawData = wb.get_sheet_by_name('RawData')
+            ws_User = wb.get_sheet_by_name('User')
+
+            last_cell = 'J' + str(ws_RawData.max_row)
+            data_array = np.array([[i.value for i in j] for j in
+                                   ws_RawData['E2':last_cell]])
+
+            params = [i.value for i in ws_User['A5':'F5'][0]]
+            vals = [i.value for i in ws_User['A6':'F6'][0]]
+            self.params = dict(zip(params, vals))
+
+            params = [i.value for i in ws_User['A8':'L8'][0]]
+            # Reduce 13 significant figures in .xlsx file to 6 (default of .format())
+            # vals = [float('{:f}'.format(i.value)) for i in ws_User['A6':'F6'][0]]
+            vals = [float('{:e}'.format(i.value)) for i in ws_User['A9':'L9'][0]]
+            self.output = dict(zip(params, vals))
+
+        self.effsuns = data_array[:, 0]     # Effective Suns
+        self.V = data_array[:, 1]
+        self.J = data_array[:, 2]
+        self.P = data_array[:, 3]
+        self.Dn = data_array[:, 4]
+        self.tau_eff = data_array[:, 5]
+
+class IV_light():
+
+    def __init__(self, cell):
+        self.cell = cell
+        self.filepath = None
+        self.filename = None
+        self.output = None
+        self.V = None
+        self.J = None
+
+    def process(self, SunsVoc_V, SunsVoc_J, SunsVoc_PFF, Rsh):
+        '''Light IV calculations'''
+
+        self.Rs_1 = analysis.Rs_calc_1(self.output['Vmp'],
+                                       self.output['Jmp'],
+                                       SunsVoc_V, SunsVoc_J)
+
+        self.Rs_2 = analysis.Rs_calc_2(self.output['Voc'],
+                                       self.output['Jsc'],
+                                       self.output['FF'],
+                                       SunsVoc_PFF)
+
+        FFo, FFs, FF = analysis.FF_ideal(self.output['Voc'],
+                                         Jsc = self.output['Jsc'],
+                                         Rs = self.Rs_1,
+                                         Rsh = Rsh)
+
+        self.FF_vals = {}
+        self.FF_vals['FFo'] = FFo
+        self.FF_vals['FFs'] = FFs
+        self.FF_vals['FF'] = FF
+
+    def plot(self,ax):
+        ax.plot(self.V, self.J, '-o', label='light IV')
+        ax.set_xlabel('Voltage [$V$]')
+        ax.set_ylabel('Current Density [$A cm^{-2}$]')
+        ax.grid(True)
+        # ax.legend(loc='best')
+
+
+
+    def load(self, raw_data_file):
         '''Loads Light IV data in cell attributes'''
-        self.lightIV_filepath = raw_data_file
-        self.lightIV_filename = os.path.basename(raw_data_file)
+        self.filepath = raw_data_file
+        self.filename = os.path.basename(raw_data_file)
 
         f = open(raw_data_file, 'r')
         d = OrderedDict()
@@ -122,16 +191,53 @@ class Cell(object):
                 d.update(dict([line.strip('\n').split(':\t')]))
 
         data_array = np.genfromtxt(raw_data_file, skip_header=20)
-        self.lightIV_V = data_array[:, 0]
-        self.lightIV_J = data_array[:, 1] / d['Cell Area (sqr cm)']
+        self.V = data_array[:, 0]
+        self.J = data_array[:, 1] / d['Cell Area (sqr cm)']
         # TODO: error check for nans and 1e12?
 
-        self.lightIV_output = d
+        self.output = d
 
-    def load_darkIV(self, raw_data_file):
+class IV_dark():
+
+    def __init__(self, cell):
+        self.cell = cell
+        self.filepath = None
+        self.filename = None
+        self.output = None
+        self.V = None
+        self.J = None
+        self.m = None
+
+    def process(self):
+        '''Dark IV calculations'''
+
+        # Ideality factor
+        self.m = 1 / self.cell.Vth * self.J \
+        / (np.gradient(self.J) / np.gradient(self.V))
+
+        # Shunt resistance, at 30mV
+        # TODO: do linear fit with zero intercept?
+        self.Rsh = 0.03 / analysis.find_nearest(0.03, self.V, self.J)
+
+    def plot_IV(self, ax):
+        ax.semilogy(self.V, self.J, '-o', label='data')
+        ax.set_xlabel('Voltage [$V$]')
+        ax.set_ylabel('Current Density [$A cm^{-2}$]')
+        ax.grid(True)
+        # ax.legend(loc='best')
+
+    def plot_m(self, ax):
+        ax.plot(self.V, self.m, '-o', label='dark IV')
+        ax.set_xlabel('Voltage [$V$]')
+        ax.set_ylabel('Ideality Factor []')
+        ax.grid(True)
+        ax.legend(loc='best')
+
+
+    def load(self, raw_data_file):
         '''Loads Dark IV data in cell attributes'''
-        self.darkIV_filepath = raw_data_file
-        self.darkIV_filename = os.path.basename(raw_data_file)
+        self.filepath = raw_data_file
+        self.filename = os.path.basename(raw_data_file)
 
         f = open(raw_data_file, 'r')
         d = OrderedDict()
@@ -151,83 +257,25 @@ class Cell(object):
         #     d.update(dict(re.findall(r'([\s\S]+)\s*:\t([^\n]+)', line)))
 
         # d['Cell Area in sqr cm'] = float(d['Cell Area in sqr cm'])
-        self.darkIV_output = d
+        self.output = d
 
         data_array = np.genfromtxt(raw_data_file, usecols=(0, 1), skip_header=11)
-        self.darkIV_V = data_array[:, 0]
-        self.darkIV_J = data_array[:, 1] / d['Cell Area in sqr cm']
+        self.V = data_array[:, 0]
+        self.J = data_array[:, 1] / d['Cell Area in sqr cm']
         # TODO: error check for nans and 1e12?
 
-    def load_sunsVoc(self, raw_data_file, text_format=False):
-        '''Loads Suns Voc data in cell attributes'''
-        self.sunsVoc_filepath = raw_data_file
-        self.sunsVoc_filename = os.path.basename(raw_data_file)
+class Reflection():
 
-        if text_format:
-            data_array = np.genfromtxt(raw_data_file, usecols=(0, 1, 2, 3, 4),
-                                       skip_header=1)
-        else:
-            wb = openpyxl.load_workbook(raw_data_file, read_only=True,
-                                        data_only=True)
-            ws_RawData = wb.get_sheet_by_name('RawData')
-            ws_User = wb.get_sheet_by_name('User')
+    def __init__(self):
+        self.wl = None
+        self.refl = None
+        self.refl_wo_escape = None
+        self.Jloss = None
 
-            last_cell = 'J' + str(ws_RawData.max_row)
-            data_array = np.array([[i.value for i in j] for j in
-                                   ws_RawData['E2':last_cell]])
+        self.filepath = None
+        self.filename = None
 
-            params = [i.value for i in ws_User['A5':'F5'][0]]
-            vals = [i.value for i in ws_User['A6':'F6'][0]]
-            self.sunsVoc_params = dict(zip(params, vals))
-
-            params = [i.value for i in ws_User['A8':'L8'][0]]
-            # Reduce 13 significant figures in .xlsx file to 6 (default of .format())
-            # vals = [float('{:f}'.format(i.value)) for i in ws_User['A6':'F6'][0]]
-            vals = [float('{:e}'.format(i.value)) for i in ws_User['A9':'L9'][0]]
-            self.sunsVoc_output = dict(zip(params, vals))
-
-        self.sunsVoc_effsuns = data_array[:, 0]     # Effective Suns
-        self.sunsVoc_V = data_array[:, 1]
-        self.sunsVoc_J = data_array[:, 2]
-        self.sunsVoc_P = data_array[:, 3]
-        self.sunsVoc_Dn = data_array[:, 4]
-        self.sunsVoc_tau_eff = data_array[:, 5]
-
-    def check_input_vals(self):
-        '''
-        Check the input cell parameters are consistent between measurements.
-        Gives the error as a percentage.
-        '''
-        # TODO: finish
-        # check whether data is loaded
-
-        # sample names
-        self.sample_names['Light IV'] = self.lightIV_output['Cell Name ']
-        self.sample_names['Suns Voc'] = self.sunsVoc_params['Sample Name']
-        self.sample_names['Dark IV'] = self.darkIV_output['Cell Name']
-
-        # Cell area
-        # tolerance = 1e-3
-        liv = self.lightIV_output['Cell Area (sqr cm)']
-        div = self.darkIV_output['Cell Area in sqr cm']
-        delta = (div - liv) / liv
-        self.input_errors['Cell Area'] = delta
-
-        # Voc
-        liv = self.lightIV_output['Voc']
-        div = self.sunsVoc_output['Voc (V)']
-        delta = (div - liv) / liv
-        self.input_errors['Voc'] = delta
-
-        # thickness
-        user_input_t = self.thickness
-        sunsVoc_t = self.sunsVoc_params['Wafer Thickness (cm)']
-        delta = (sunsVoc_t - user_input_t) / user_input_t
-        self.input_errors['Cell thickness'] = delta
-
-# process data ###############################################################
-
-    def refl_process(self, f_metal = None, wlbounds=(900, 1000)):
+    def process(self, f_metal = None, wlbounds=(900, 1000)):
         '''
         Performs several calculations including:
         - Weighted Average Reflection (WAR)
@@ -242,181 +290,128 @@ class Cell(object):
             print("Reflection data not loaded")
             return
 
-        self.AM15G_Jph = analysis.AM15G_resample(self.refl_wl)
-        i_upper = (self.refl_wl <= 1000)
+        self.AM15G_Jph = analysis.AM15G_resample(self.wl)
+        i_upper = (self.wl <= 1000)
         self.WAR = (np.dot(self.refl[i_upper], self.AM15G_Jph[i_upper])
                     / np.sum(self.AM15G_Jph[i_upper]))
 
         if f_metal is None:
-            index = (self.refl_wl >= 400) * i_upper
+            index = (self.wl >= 400) * i_upper
             refl_min = np.amin(self.refl[index])
             self.f_metal = refl_min
         else:
             self.f_metal = f_metal
 
-        index_l = (self.refl_wl >= wlbounds[0])
-        index = (self.refl_wl <= wlbounds[1]) * index_l
-        popt, pcov = curve_fit(line, self.refl_wl[index], self.refl[index])
+        index_l = (self.wl >= wlbounds[0])
+        index = (self.wl <= wlbounds[1]) * index_l
+
+        # use numpys implementation for line fitting
+        popt, pcov = np.polyfit(self.wl[index], self.refl[index], 1, cov=True)
 
         self.refl_wo_escape = np.copy(self.refl)
-        self.refl_wo_escape[index_l] = self.refl_wl[index_l] * popt[0] + popt[1]
+        self.refl_wo_escape[index_l] = np.polyval(popt, self.wl[index_l])
 
         Jloss = {}
         Jloss['R'] = np.dot(self.refl, self.AM15G_Jph)
         Jloss['R_wo_escape'] = np.dot(self.refl_wo_escape, self.AM15G_Jph)
         self.Jloss = Jloss
 
-        def plot_refl(ax):
-            ax.plot(self.refl_wl, self.refl, '-o')
-            ax.plot(self.refl_wl, self.refl_wo_escape, '-o')
-            ax.set_ylabel('Reflectance [%]')
-            ax.grid(True)
+    def plot(self, ax):
+        ax.plot(self.wl, self.refl, '-o')
+        ax.plot(self.wl, self.refl_wo_escape, '-o')
+        ax.set_ylabel('Reflectance [%]')
+        ax.grid(True)
+    def plot_QE(self, ax):
+        ax.fill_between(self.wl, 100 - self.refl,
+                        100 - self.refl_wo_escape)
+        ax.legend(loc='best')
+        # ax.set_ylabel('Reflectance [%]')
+        # ax.grid(True)
 
-        def plot_refl_QE(ax):
-            ax.fill_between(self.refl_wl, 100 - self.refl,
-                            100 - self.refl_wo_escape)
-            ax.legend(loc='best')
-            # ax.set_ylabel('Reflectance [%]')
-            # ax.grid(True)
 
-        return (plot_refl, plot_refl_QE)
 
-    def QE_process(self):
+    def load(self, raw_data_file):
+        '''Loads Reflectance data in cell attributes'''
+        self.filepath = raw_data_file
+        self.filename = os.path.basename(raw_data_file)
+
+        data_array = np.genfromtxt(raw_data_file, usecols=(0, 1), skip_header=1,
+                                   delimiter=',')
+        self.wl = data_array[:, 0]
+        self.refl = data_array[:, 1]
+
+
+
+class QE():
+
+    def __init__(self):
+        self.EQE = None
+        self.IQE = None
+        self.wl = None
+        self.output = None
+
+        self.filepath = None
+        self.filename = None
+
+    def process(self, refl):
         '''
         Performs several calculations from QE and Reflectance data including:
         - IQE
         - Leff and SRV_rear
         the results are saved into cell attributes
         '''
-        # exit early if data isn't loaded, better way?
-        # try:
-        #     self.refl
-        # except AttributeError:
-        #     print("Reflection data not loaded")
-        #     return
-        #
-        # try:
-        #     self.QE_wl
-        # except AttributeError:
-        #     print("QE data not loaded")
-        #     return
+        self.IQE = 100 * self.EQE / (100 - refl)
 
-        # TODO: deal with difference in wl sampling
-        self.IQE = 100 * self.EQE / (100 - self.refl)
+    def plot_EQE(self, ax):
 
-        def plot_EQE(ax):
-            line_EQE = ax.plot(self.QE_wl, self.EQE, '-o', label='EQE')
-            ax.set_xlabel('Wavelength [$nm$]')
-            ax.set_ylabel('QE [%]')
-            ax.legend(loc='best')
-            ax.grid(True)
-            return line_EQE     # currently not working
+        line_EQE = ax.plot(self.wl, self.EQE, '-o', label='EQE')
+        ax.set_xlabel('Wavelength [$nm$]')
+        ax.set_ylabel('QE [%]')
+        ax.legend(loc='best')
+        ax.grid(True)
+        return line_EQE     # currently not working
 
-        def plot_IQE(ax):
-            ax.plot(self.QE_wl, self.IQE, '-o', label='IQE')
-            ax.set_xlabel('Wavelength [$nm$]')
-            ax.set_ylabel('QE [%]')
-            ax.legend(loc='best')
-            ax.grid(True)
+    def plot_IQE(self, ax):
+        ax.plot(self.wl, self.IQE, '-o', label='IQE')
+        ax.set_xlabel('Wavelength [$nm$]')
+        ax.set_ylabel('QE [%]')
+        ax.legend(loc='best')
+        ax.grid(True)
 
-        return (plot_EQE, plot_IQE)
 
-    def darkIV_process(self):
-        '''Dark IV calculations'''
 
-        # Ideality factor
-        self.darkIV_m = 1 / self.Vth * self.darkIV_J \
-        / (np.gradient(self.darkIV_J) / np.gradient(self.darkIV_V))
+    def load(self, raw_data_file):
+        '''Loads EQE data into cell attributes'''
+        self.filepath = raw_data_file
+        self.filename = os.path.basename(raw_data_file)
 
-        # Shunt resistance, at 30mV
-        # TODO: do linear fit with zero intercept?
-        self.Rsh = 0.03 / analysis.find_nearest(0.03, self.darkIV_V, self.darkIV_J)
+        # the other columns are ignored
+        data_array = np.genfromtxt(raw_data_file, usecols=(0, 1),
+                                   skip_header=1, skip_footer=8)
+        self.wl = data_array[:, 0]
+        self.EQE = data_array[:, 1]
 
-        def plot_darkIV(ax):
-            ax.semilogy(self.darkIV_V, self.darkIV_J, '-o', label='data')
-            ax.set_xlabel('Voltage [$V$]')
-            ax.set_ylabel('Current Density [$A cm^{-2}$]')
-            ax.grid(True)
-            # ax.legend(loc='best')
+        f = open(raw_data_file, 'r')
+        d = {}
+        for line in f.readlines()[-7:-1]:
+            # d.update(dict(re.findall(r'([\s\S]+)\s*:\s\s([^\n]+)', line)))
+            d.update(dict([line.strip('\n').split(':')]))     # alternative
 
-        def plot_darkIV_m(ax):
-            ax.plot(self.darkIV_V, self.darkIV_m, '-o', label='dark IV')
-            ax.set_xlabel('Voltage [$V$]')
-            ax.set_ylabel('Ideality Factor []')
-            ax.grid(True)
-            ax.legend(loc='best')
+        self.output = d
 
-        return plot_darkIV, plot_darkIV_m
-        # vals =  {elem: popt[i] for i, elem in enumerate(fit_params)}
-        #
-        # return (plot_darkIV, plot_darkIV_m)
+class loss_analysis_handeller():
 
-    def sunsVoc_process(self):
-        '''Suns Voc calculations'''
+    def __init__(self, **args):
+        # containts t he information about the cell
+        # this should get around.
+        self.cell = Cell()
+        self.reflection  = Reflection()
+        self.qe = QE()
+        self.sunvoc = IV_suns(self.cell)
+        self.liv = IV_light(self.cell)
+        self.div  = IV_dark(self.cell)
 
-        # Ideality factor, TODO: better method?
-        self.sunsVoc_m = 1 / self.Vth * self.sunsVoc_effsuns \
-        / (np.gradient(self.sunsVoc_effsuns) / np.gradient(self.sunsVoc_V))
 
-        def plot_sunsVoc_IV(ax):
-            ax.plot(self.sunsVoc_V, self.sunsVoc_J, '-o', label='suns Voc')
-            ax.set_xlabel('Voltage [$V$]')
-            ax.set_ylabel('Current Density [$A cm^{-2}$]')
-            ax.grid(True)
-            ax.legend(loc='best')
-            ax.set_ylim(ymin=0)
-
-        def plot_sunsVoc_tau(ax):
-            # TODO: trims off some noise, use better method?
-            ax.loglog(self.sunsVoc_Dn[5:-5], self.sunsVoc_tau_eff[5:-5], '-o',
-                    label='Suns Voc')
-            ax.set_xlabel('$\Delta n$ [$cm^{-3}$]')
-            ax.set_ylabel('Current Density [$A cm^{-2}$]')
-            ax.grid(True)
-            ax.legend(loc='best')
-            # ax.set_xlim(xmin=1e11)
-
-        def plot_sunsVoc_m(ax):
-            # trims some noise at ends of array
-            ax.plot(self.sunsVoc_V[10:-5], self.sunsVoc_m[10:-5], '-o', label='suns Voc')
-            ax.set_xlabel('Voltage [$V$]')
-            ax.set_ylabel('Ideality Factor []')
-            ax.grid(True)
-            ax.legend(loc='best')
-            ax.set_ylim(ymin=0)
-
-        return (plot_sunsVoc_IV, plot_sunsVoc_tau, plot_sunsVoc_m)
-
-    def lightIV_process(self):
-        '''Light IV calculations'''
-
-        self.Rs_1 = analysis.Rs_calc_1(self.lightIV_output['Vmp'],
-                                       self.lightIV_output['Jmp'],
-                                       self.sunsVoc_V, self.sunsVoc_J)
-
-        self.Rs_2 = analysis.Rs_calc_2(self.lightIV_output['Voc'],
-                                       self.lightIV_output['Jsc'],
-                                       self.lightIV_output['FF'],
-                                       self.sunsVoc_output['PFF'])
-
-        FFo, FFs, FF = analysis.FF_ideal(self.lightIV_output['Voc'],
-                                         Jsc = self.lightIV_output['Jsc'],
-                                         Rs = self.Rs_1,
-                                         Rsh = self.Rsh)
-
-        self.FF_vals = {}
-        self.FF_vals['FFo'] = FFo
-        self.FF_vals['FFs'] = FFs
-        self.FF_vals['FF'] = FF
-
-        def plot_lightIV(ax):
-            ax.plot(self.lightIV_V, self.lightIV_J, '-o', label='light IV')
-            ax.set_xlabel('Voltage [$V$]')
-            ax.set_ylabel('Current Density [$A cm^{-2}$]')
-            ax.grid(True)
-            # ax.legend(loc='best')
-
-        return plot_lightIV
 
 # print and plot #############################################################
 
@@ -429,12 +424,9 @@ class Cell(object):
             output_list.append('{:>30}, {:>20}'.format(key, val))
 
         output_list.append('\n')
-        quick_print('##### Sample names','')
-        for key, val in self.sample_names.items():
-            quick_print(key, '{:s}'.format(val))
-
-        output_list.append('\n')
-        quick_print('##### Input errors','')
+        quick_print('##### Sample names',')1', '{:.3e}'.format(self.Rs_1))
+        quick_print('Rs2', '{:.3e}'.format(self.Rs_2))
+        # TODO: fix thi
         for key, val in self.input_errors.items():
             quick_print(key, '{:.3e}'.format(val))
 
@@ -501,6 +493,8 @@ class Cell(object):
         fig_IV = plt.figure(2, figsize=(30/2.54, 15/2.54))
         fig_IV.clf()
 
+
+
         ax_refl = fig_QE.add_subplot(2, 2, 1)
         ax_QE = fig_QE.add_subplot(2, 2, 2)
         ax_QE_fit = fig_QE.add_subplot(2, 2, 3)
@@ -511,21 +505,26 @@ class Cell(object):
         ax_lightIV = fig_IV.add_subplot(2, 2, 2)
         ax_tau = fig_IV.add_subplot(2, 2, 4)
 
-        self.plot_refl(ax_refl)
-        self.plot_refl(ax_QE)
-        self.plot_EQE(ax_QE)
-        self.plot_IQE(ax_QE)
-        self.plot_Basore_fit(ax_QE_fit)
-        line_EQE, = self.plot_EQE(ax_QE_layered)
-        line_EQE.set_linestyle('v')
-        self.plot_refl_QE(ax_QE_layered)
 
-        self.plot_darkIV(ax_darkIV)
-        self.plot_darkIV_m(ax_ideality)
-        self.plot_sunsVoc_m(ax_ideality)
-        self.plot_lightIV(ax_lightIV)
-        self.plot_sunsVoc_IV(ax_lightIV)
-        self.plot_sunsVoc_tau(ax_tau)
+        self.reflection.plot(ax_refl)
+        self.reflection.plot(ax_QE)
+        self.qe.plot_EQE(ax_QE)
+        self.qe.plot_IQE(ax_QE)
+
+        self.sunvoc.plot_m(ax_ideality)
+        self.sunvoc.plot_IV(ax_lightIV)
+        self.sunvoc.plot_tau(ax_tau)
+        self.liv.plot(ax_lightIV)
+
+        self.div.plot_IV(ax_darkIV)
+        self.div.plot_m(ax_darkIV)
+
+
+        # self.plot_Basore_fit(ax_QE_fit)
+        # line_EQE, = self.plot_EQE(ax_QE_layered)
+        # line_EQE.set_marker('v')
+        # self.plot_refl_QE(ax_QE_layered)
+
 
         fig_QE.set_tight_layout(True)
         fig_IV.set_tight_layout(True)
@@ -541,16 +540,76 @@ class Cell(object):
         '''Call all calculations, plot and print outputs'''
 
         # most of these methods return function objects to plot default output
-        self.check_input_vals()
-        self.plot_sunsVoc_IV, self.plot_sunsVoc_tau, self.plot_sunsVoc_m = self.sunsVoc_process()
-        self.plot_refl, self.plot_refl_QE = self.refl_process()
-        self.plot_EQE, self.plot_IQE = self.QE_process()
-        self.plot_lightIV = self.lightIV_process()
-        self.plot_darkIV, self.plot_darkIV_m = self.darkIV_process()
-        vals, self.plot_Basore_fit = analysis.fit_Basore(self.QE_wl, self.IQE)
+        # self.check_input_vals()
+
+
+        self.sunvoc.process()
+        self.reflection.process()
+        self.qe.process(self.reflection.refl)
+        self.div.process()
+        self.liv.process(self.sunvoc.V, self.sunvoc.J, self.sunvoc.output['PFF'], self.div.Rsh)
+
+        # vals, self.plot_Basore_fit = analysis.fit_Basore(self.QE_wl, self.IQE)
         self.plot_all()
-        self.collect_outputs()
-        self.print_output_to_file()
+
+        # self.collect_outputs()
+        # self.print_output_to_file()
+
+
+class Cell(object):
+# this seems very involved, maybe split up into component class for the different types
+# loading data ###########################################################
+
+    def __init__(self, thickness = 0.019):
+        # cell parameters TODO: update and check
+        self.thickness = thickness  # [cm]
+        self.input_errors = {}
+        self.sample_names = {}
+        self.Rs_1 = None
+        self.Rsh = None
+        # self.AM15G_wl = np.genfromtxt('AM1.5G_spectrum.dat', usecols=(0,),
+        #                               skip_header=1)
+        # self.AM15G_Jph = np.genfromtxt('AM1.5G_spectrum.dat', usecols=(1,),
+        #                                skip_header=1)
+        # self.AM15G_Jph_sum = np.sum(self.AM15G_Jph)
+        # self.alpha_data = np.genfromtxt('Si_alpha_Green_2008.dat', usecols=(0,1),
+                                #    skip_header=1).transpose()
+        T = 300   # make optional input?
+        self.Vth = constants.k * T / constants.e
+
+
+
+    def check_input_vals(self):
+        '''
+        Check the input cell parameters are consistent between measurements.
+        Gives the error as a percentage.
+        '''
+        # TODO: finish
+        # check whether data is loaded
+
+        # sample names
+        self.sample_names['Light IV'] = self.lightIV_output['Cell Name ']
+        self.sample_names['Suns Voc'] = self.sunsVoc_params['Sample Name']
+        self.sample_names['Dark IV'] = self.darkIV_output['Cell Name']
+
+        # Cell area
+        # tolerance = 1e-3
+        liv = self.lightIV_output['Cell Area (sqr cm)']
+        div = self.darkIV_output['Cell Area in sqr cm']
+        delta = (div - liv) / liv
+        self.input_errors['Cell Area'] = delta
+
+        # Voc
+        liv = self.lightIV_output['Voc']
+        div = self.sunsVoc_output['Voc (V)']
+        delta = (div - liv) / liv
+        self.input_errors['Voc'] = delta
+
+        # thickness
+        user_input_t = self.thickness
+        sunsVoc_t = self.sunsVoc_params['Wafer Thickness (cm)']
+        delta = (sunsVoc_t - user_input_t) / user_input_t
+        self.input_errors['Cell thickness'] = delta
 
 
 if __name__ == "__main__":
