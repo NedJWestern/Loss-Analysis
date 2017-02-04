@@ -487,10 +487,11 @@ class loss_analysis_handeller():
     def plot_all(self):
         '''Plot the output of previous calculations'''
         # for reflectance
-        fig_QE = plt.figure(1, figsize=(30/2.54, 15/2.54))
+
+        fig_QE = plt.figure('QE', figsize=(30/2.54, 15/2.54))
         fig_QE.clf()
         # for light and dark IV
-        fig_IV = plt.figure(2, figsize=(30/2.54, 15/2.54))
+        fig_IV = plt.figure('IV', figsize=(30/2.54, 15/2.54))
         fig_IV.clf()
 
 
@@ -520,10 +521,10 @@ class loss_analysis_handeller():
         self.div.plot_m(ax_darkIV)
 
 
-        # self.plot_Basore_fit(ax_QE_fit)
-        # line_EQE, = self.plot_EQE(ax_QE_layered)
-        # line_EQE.set_marker('v')
-        # self.plot_refl_QE(ax_QE_layered)
+        self.plot_Basore_fit(ax_QE_fit)
+        line_EQE, = self.qe.plot_EQE(ax_QE_layered)
+        line_EQE.set_marker('v')
+        self.reflection.plot_QE(ax_QE_layered)
 
 
         fig_QE.set_tight_layout(True)
@@ -533,8 +534,8 @@ class loss_analysis_handeller():
         #             + '_QE.png')
         # fig_IV.savefig(self.lightIV_output['Cell Name ']
         #             + '_IV.png')
-        fig_QE.show()
-        fig_IV.show()
+        plt.show()
+
 
     def process_all(self):
         '''Call all calculations, plot and print outputs'''
@@ -549,7 +550,7 @@ class loss_analysis_handeller():
         self.div.process()
         self.liv.process(self.sunvoc.V, self.sunvoc.J, self.sunvoc.output['PFF'], self.div.Rsh)
 
-        # vals, self.plot_Basore_fit = analysis.fit_Basore(self.QE_wl, self.IQE)
+        vals, self.plot_Basore_fit = analysis.fit_Basore(self.qe.wl, self.qe.IQE)
         self.plot_all()
 
         # self.collect_outputs()
