@@ -94,7 +94,7 @@ class LossAnalysisGui(QWidget):
             files.update(i.file())
 
         # pass the file names, and let the next thing handle them.
-        la = loss_analysis.LossAnalysisHandler(**files)
+        la = loss_analysis.Cell(**files)
         la.process_all()
 
 

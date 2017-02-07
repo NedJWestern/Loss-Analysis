@@ -12,29 +12,24 @@ import tkinter as tk
 from tkinter.filedialog import askopenfilename  # remove this?
 # modules for this package
 import analysis     # requires correct current directory, change? xxx
-from scipy import constants
+from scipy import constants     # wow, did not know this existed
+
+T = 300   # TODO: make optional input?
+Vth = constants.k * T / constants.e
 
 
 class IVSuns():
     filepath = None
     filename = None
 
-    def __init__(self, fname, cell):
-        self.cell = cell
-
-        self.output = None
-        self.V = None
-        self.J = None
-        self.effsuns = None
-        self.params = None
-
+    def __init__(self, fname):
         self.load(fname)
 
     def process(self):
         '''Suns Voc calculations'''
 
         # Ideality factor, TODO: better method?
-        self.m = 1 / self.cell.Vth * self.effsuns \
+        self.m = 1 / Vth * self.effsuns \
             / (np.gradient(self.effsuns) / np.gradient(self.V))
 
     def plot_IV(self, ax):
@@ -106,33 +101,19 @@ class IVSuns():
 
 class IVLight():
 
-    def __init__(self, fname, cell):
-        self.cell = cell
-        self.filepath = None
-        self.filename = None
-        self.output = None
-        self.V = None
-        self.J = None
-
+    def __init__(self, fname):
         self.load(fname)
 
-    def output(self):
-        return
-
-    def process(self):
+    def process(self, Rsh, Rs):
         '''Light IV calculations'''
 
         FFo, FFs, FF = analysis.FF_ideal(self.output['Voc'],
-                                         Jsc=self.output['Jsc'],
-                                         Rs=self.cell.Rs_1,
-                                         Rsh=self.cell.Rsh)
+                                         Jsc=self.output['Jsc'], Rs=Rs, Rsh=Rsh)
 
         self.FF_vals = {}
         self.FF_vals['FFo'] = FFo
         self.FF_vals['FFs'] = FFs
         self.FF_vals['FF'] = FF
-
-        return self.cell
 
     def plot(self, ax):
         ax.plot(self.V, self.J, '-o', label='light IV')
@@ -171,22 +152,14 @@ class IVLight():
 
 class IVDark():
 
-    def __init__(self, fname, cell):
-        self.cell = cell
-        self.filepath = None
-        self.filename = None
-        self.output = None
-        self.V = None
-        self.J = None
-        self.m = None
-
+    def __init__(self, fname):
         self.load(fname)
 
     def process(self):
         '''Dark IV calculations'''
 
         # Ideality factor
-        self.m = 1 / self.cell.Vth * self.J \
+        self.m = 1 / Vth * self.J \
             / (np.gradient(self.J) / np.gradient(self.V))
 
         # Shunt resistance, at 30mV
@@ -244,15 +217,6 @@ class IVDark():
 class Reflection():
 
     def __init__(self, fname):
-
-        self.wl = None
-        self.refl = None
-        self.refl_wo_escape = None
-        self.Jloss = None
-
-        self.filepath = None
-        self.filename = None
-
         self.load(fname)
 
     def process(self, f_metal=None, wlbounds=(900, 1000)):
@@ -323,14 +287,6 @@ class Reflection():
 class QE():
 
     def __init__(self, fname):
-        self.EQE = None
-        self.IQE = None
-        self.wl = None
-        self.output = None
-
-        self.filepath = None
-        self.filename = None
-
         self.load(fname)
 
     def process(self, refl):
@@ -374,21 +330,23 @@ class QE():
         for line in f.readlines()[-7:-1]:
             d.update(dict([line.strip('\n').split(':')]))
 
+        d['Jsc'] = float(d['Jsc']) / 1e3  # TODO: not working
         self.output = d
 
 
-class LossAnalysisHandler():
+class Cell(object):
 
     # TODO: pass as dict instead of **args ?
-    def __init__(self, **args):
+    def __init__(self, thickness=0.019, **args):
+        self.thickness = thickness  # [cm]
         self.sample_names = {}
         self.input_errors = {}
-        self.cell = Cell()
         self.reflection = Reflection(args['reflectance_fname'])
         self.qe = QE(args['EQE_fname'])
-        self.sunsVoc = IVSuns(args['suns Voc_fname'], self.cell)
-        self.liv = IVLight(args['light IV_fname'], self.cell)
-        self.div = IVDark(args['dark IV_fname'], self.cell)
+        self.sunsVoc = IVSuns(args['suns Voc_fname'])
+        self.div = IVDark(args['dark IV_fname'])
+        self.liv = IVLight(args['light IV_fname'])
+        self.check_input_vals()
 
     def check_input_vals(self):
         '''
@@ -400,7 +358,7 @@ class LossAnalysisHandler():
 
         # sample names
         self.sample_names['Light IV'] = self.liv.output['Cell Name ']
-        self.sample_names['Suns Voc'] = self.sunsvoc.output['Sample Name']
+        self.sample_names['Suns Voc'] = self.sunsVoc.params['Sample Name']
         self.sample_names['Dark IV'] = self.div.output['Cell Name']
 
         # Cell area
@@ -411,8 +369,8 @@ class LossAnalysisHandler():
         self.input_errors['Cell Area'] = delta
 
         # thickness
-        user_input_t = self.cell.thickness
-        sunsVoc_t = self.sunsvoc.output['Wafer Thickness (cm)']
+        user_input_t = self.thickness
+        sunsVoc_t = self.sunsVoc.params['Wafer Thickness (cm)']
         delta = (sunsVoc_t - user_input_t) / user_input_t
         self.input_errors['Cell thickness'] = delta
 
@@ -425,11 +383,11 @@ class LossAnalysisHandler():
         # Jsc
         liv = self.liv.output['Jsc']
         iqe = self.qe.output['Jsc']
-        delta = (div - liv) / liv
+        delta = (iqe - liv) / liv
         self.input_errors['Jsc'] = delta
 
     def collect_outputs(self):
-        '''Print input and output parameters to file or terminal'''
+        '''Collects input and output parameters into self.output_list'''
 
         output_list = []
 
@@ -437,10 +395,10 @@ class LossAnalysisHandler():
             output_list.append('{:>30}, {:<20}'.format(key, val))
 
         output_list.append('\n')
-        quick_print('##### Sample names', '',)
+        quick_print('##### Check inputs', '',)
 
         for key, val in self.sample_names.items():
-            quick_print(key, '{:.3e}'.format(val))
+            quick_print(key, '{:s}'.format(val))
         for key, val in self.input_errors.items():
             quick_print(key, '{:.3e}'.format(val))
 
@@ -467,6 +425,8 @@ class LossAnalysisHandler():
         output_list.append('\n')
         quick_print('##### Suns Voc', '')
         quick_print('Suns-Voc filename', self.sunsVoc.filename)
+        for key, val in self.sunsVoc.params.items():
+            quick_print(key, val)
         for key, val in self.sunsVoc.output.items():
             quick_print(key, val)
 
@@ -478,9 +438,9 @@ class LossAnalysisHandler():
 
         output_list.append('\n')
         quick_print('##### Calclated', '')
-        quick_print('Rsh', '{:.3e}'.format(self.cell.Rsh))
-        quick_print('Rs1', '{:.3e}'.format(self.cell.Rs_1))
-        quick_print('Rs2', '{:.3e}'.format(self.cell.Rs_2))
+        quick_print('Rsh', '{:.3e}'.format(self.Rsh))
+        quick_print('Rs1', '{:.3e}'.format(self.Rs_1))
+        quick_print('Rs2', '{:.3e}'.format(self.Rs_2))
         # TODO: fix this
         # for key, val in self.FF_vals.items():
         #     quick_print(key, '{:.3e}'.format(val))
@@ -493,7 +453,7 @@ class LossAnalysisHandler():
                            + '_loss_analysis_summary.csv', 'w')
 
         for item in self.output_list:
-            # print(item)
+            print(item)
             output_file.write(item + '\r\n')
 
         output_file.close()
@@ -552,75 +512,28 @@ class LossAnalysisHandler():
         self.sunsVoc.process()
         self.reflection.process()
         self.qe.process(self.reflection.refl)
-        self.cell.Rsh = self.div.process()
+        self.Rsh = self.div.process()
 
-        self.cell.Rs_1 = analysis.Rs_calc_1(self.liv.output['Vmp'],
+        self.Rs_1 = analysis.Rs_calc_1(self.liv.output['Vmp'],
                                             self.liv.output['Jmp'],
                                             self.sunsVoc.V, self.sunsVoc.J)
 
-        self.cell.Rs_2 = analysis.Rs_calc_2(self.liv.output['Voc'],
+        self.Rs_2 = analysis.Rs_calc_2(self.liv.output['Voc'],
                                             self.liv.output['Jsc'],
                                             self.liv.output['FF'],
                                             self.sunsVoc.output['PFF'])
 
-        self.cell = self.liv.process()
+        self.liv.process(self.Rsh, self.Rs_1)
+        # self.cell = self.liv.process()      # this is weird
 
         vals, self.plot_Basore_fit = analysis.fit_Basore(
             self.qe.wl, self.qe.IQE)
 
-        self.plot_all()
-
         self.collect_outputs()
         self.print_output_to_file()
+        self.plot_all()
 
-
-class Cell(object):
-
-    def __init__(self, thickness=0.019):
-        self.thickness = thickness  # [cm]
-        self.Rs_1 = None
-        self.Rsh = None
-        T = 300   # TODO: make optional input?
-        self.Vth = constants.k * T / constants.e
 
 if __name__ == "__main__":
-    # pwd = os.getcwd()
-
-    # cell1 = Cell()
-    # cell1.load_sunsVoc(pwd, 'example_sunsVoc.dat', text_format=True)
-    # cell1.load_lightIV(pwd, 'example_lightIV.lgt')
-    # cell1.load_darkIV(pwd, 'example_darkIV.drk')
-    # cell1.load_refl(pwd, 'example_reflectance.txt')
-    # cell1.load_EQE(pwd, 'example_eqe.txt')
-    # cell1.refl_process()
-    # cell1.QE_process()
-    # vals, plot_Basore = cell1.fit_Basore(cell1.QE_wl, cell1.IQE)
-    # # print(cell1.fit_Isenberg(cell1.QE_wl, cell1.IQE))
-    # cell1.plot()
-
-    # example_dir = os.path.abspath(os.pardir + '/example_cell/')
-    example_dir = os.path.join(os.path.pardir(os.path.dirname(__file__)), '/example_cell/')
-    # pwd = os.path.join(pwd, b_dir)
-    b = Cell()
-
-    # flags
-    choose_files = 0
-
-    if choose_files:
-        root = tk.Tk()
-        root.withdraw()
-        b.load_refl(os.path.join(example_dir, 'example_reflectance.csv'))
-        b.load_EQE(os.path.join(example_dir, 'example_EQE.txt'))
-        b.load_lightIV(askopenfilename(title='Light IV'))
-        b.load_darkIV(askopenfilename(title='Dark IV'))
-        b.load_sunsVoc(askopenfilename(title='Suns Voc'))
-    else:
-        b.load_refl(os.path.join(example_dir, 'example_reflectance.csv'))
-        b.load_EQE(os.path.join(example_dir, 'example_EQE.txt'))
-        b.load_lightIV(os.path.join(example_dir, 'example_lightIV.lgt'))
-        b.load_darkIV(os.path.join(example_dir, 'example_darkIV.drk'))
-        b.load_sunsVoc(os.path.join(example_dir, 'example_sunsVoc.xlsm'))
-
-    b.process_all()
-
-    # print(cell1.wl_to_alpha(cell1.refl_wl))
+    # TODO: reimplement
+    pass
