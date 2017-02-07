@@ -1,11 +1,7 @@
 import numpy as np
-import constants
+from scipy import constants
 from scipy.optimize import curve_fit
-
-# for linear fits
-def line(x, m, b):  # b = yintercept
-    return m * x + b
-
+import os
 
 # helper functions ###########################################################
 
@@ -79,11 +75,13 @@ def line(x, m, b):  # b = yintercept
 #     #TODO: load into attributes instead of returning?
 #     return {elem:popt[i] for i, elem in enumerate(fit_params)}
 
+path = os.sep.join(os.path.dirname(os.path.realpath(__file__)).split(os.sep)[:-1])
+
 def AM15G_resample(wl):
     '''Returns AM1.5G spectrum at given wavelengths'''
-    AM15G_wl = np.genfromtxt('../constants/AM1.5G_spectrum.dat', usecols=(0,),
+    AM15G_wl = np.genfromtxt(os.path.join(path,'constants', 'AM1.5G_spectrum.dat'), usecols=(0,),
                                   skip_header=1)
-    AM15G_Jph = np.genfromtxt('../constants/AM1.5G_spectrum.dat', usecols=(1,),
+    AM15G_Jph = np.genfromtxt(os.path.join(path,'constants', 'AM1.5G_spectrum.dat'), usecols=(1,),
                                    skip_header=1)
     return np.interp(wl, AM15G_wl, AM15G_Jph)
 
@@ -101,7 +99,7 @@ def find_nearest(x_val, xdata, ydata=None):
 
 def wl_to_alpha(given_wl):
     '''Returns alpha for a given wavelength in [nm] xxx? in Si'''
-    alpha_data = np.genfromtxt('../constants/Si_alpha_Green_2008.dat',
+    alpha_data = np.genfromtxt(os.path.join(path,'constants', 'Si_alpha_Green_2008.dat'),
                                usecols=(0,1), skip_header=1).transpose()
     wl = alpha_data[0]
     alpha = alpha_data[1]
@@ -133,13 +131,13 @@ def fit_Basore(wavelength, IQE, theta=0, wlbounds=(1040, 1100)):
     fit_params = ['Leff']
     # TODO: is this not already a float?
     alpha = wl_to_alpha(wavelength) / float(np.cos(np.radians(theta)))
-    popt, pcov = curve_fit(line, 1. / alpha, 1. / IQE)
+    popt, pcov = np.polyfit(1. / alpha, 1. / IQE,1,cov=True)
 
     vals =  {elem: popt[i] for i, elem in enumerate(fit_params)}
 
     def plot_Basore_fit(ax):
         ax.plot(1. / alpha, 1. / IQE, '-o', label='data')
-        ax.plot(1. / alpha, line(1. / alpha, popt[0], popt[1]),
+        ax.plot(1. / alpha, np.polyval(popt, 1. / alpha),
                 label='fit_Basore')
         ax.set_xlabel('$1/ \\alpha$ [$cm^2$]')
         ax.set_ylabel('$1/IQE$ []')
@@ -184,7 +182,7 @@ def FF_ideal(Voc, Jsc = None, Rs = None, Rsh = None, T=300):
     http://dx.doi.org/10.1016/0379-6787(82)90057-6
     '''
     # Rs -> infty,  Rsh -> 0
-    voc = constants.q * Voc / constants.k / T
+    voc = constants.e * Voc / constants.k / T
     FFo = (voc - np.log(voc + 0.72)) / (voc + 1)
 
     # Rs -> finite,  Rsh -> 0
