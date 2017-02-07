@@ -1,38 +1,6 @@
 # port "loss analysis v5.xlsx" by Ziv Hameiri to python3
 # requires python3
 
-'''
-NOTES:
-- not sure how to best to combine data with different wavelength resolutions,
-  currently downsampling to the lowest possible resolution (?)
-
-TODO:
-- see in-text TODOs and xxx
-- add pie charts or waterfall plots for loss analysis
-- move some helper functions to another module?
-- change load functions into pure functions returning dictionaries, then use
-decorators to load attributes?
-- user input for some parameters (eg. wafer thickness)
-- create dependency tree for calculations (QE and IV are almost separate)
-- robust to having missing data?
-- should some methods be converted to in class functions? ie: wl_to_alpha
-- return covariance for every fitting parameter?
-- easily compare different samples
-
-waterfall charts:
-- http://tooblippe.github.io/waterfall/
-- http://pbpython.com/waterfall-chart.html
-
-Coding notes:
-- Q: Why don't the methods to load data return values instead of setting class
-    attributes, doesn't this make this code less reusable?
-    - Ans: These methods are only run once per instance and do not have any
-    feedback, so they are stable. This code should be self contained, so will
-    not be reused elsewhere.
-- Q: Why do the process functions return function objects?
-    - Ans: To make the functions 'pure functions' and more reusable
-'''
-
 import openpyxl
 import numpy as np
 import os
@@ -47,7 +15,7 @@ import analysis     # requires correct current directory, change? xxx
 from scipy import constants
 
 
-class IV_suns():
+class IVSuns():
     filepath = None
     filename = None
 
@@ -97,7 +65,7 @@ class IV_suns():
         ax.set_ylim(ymin=0)
 
     def load(self, raw_data_file, text_format=False):
-        '''Loads Suns Voc data in cell attributes'''
+        '''Loads Suns Voc data in attributes'''
 
         self.filepath = raw_data_file
         self.filename = os.path.basename(raw_data_file)
@@ -115,15 +83,17 @@ class IV_suns():
             data_array = np.array([[i.value for i in j] for j in
                                    ws_RawData['E2':last_cell]])
 
-            params = [i.value for i in ws_User['A5':'F5'][0]]
-            vals = [i.value for i in ws_User['A6':'F6'][0]]
+            # TODO: I know this list() is shite, temporary workaround for my old
+            # openpyxl install
+            params = [i.value for i in list(ws_User['A5':'F5'])[0]]
+            vals = [i.value for i in list(ws_User['A6':'F6'])[0]]
             self.params = dict(zip(params, vals))
 
-            params = [i.value for i in ws_User['A8':'L8'][0]]
+            params = [i.value for i in list(ws_User['A8':'L8'])[0]]
             # Reduce 13 significant figures in .xlsx file to 6 (default of .format())
             # vals = [float('{:f}'.format(i.value)) for i in ws_User['A6':'F6'][0]]
             vals = [float('{:e}'.format(i.value))
-                    for i in ws_User['A9':'L9'][0]]
+                    for i in list(ws_User['A9':'L9'])[0]]
             self.output = dict(zip(params, vals))
 
         self.effsuns = data_array[:, 0]     # Effective Suns
@@ -134,7 +104,7 @@ class IV_suns():
         self.tau_eff = data_array[:, 5]
 
 
-class IV_light():
+class IVLight():
 
     def __init__(self, fname, cell):
         self.cell = cell
@@ -172,7 +142,7 @@ class IV_light():
         # ax.legend(loc='best')
 
     def load(self, raw_data_file):
-        '''Loads Light IV data in cell attributes'''
+        '''Loads Light IV data in attributes'''
         self.filepath = raw_data_file
         self.filename = os.path.basename(raw_data_file)
 
@@ -199,7 +169,7 @@ class IV_light():
         self.output = d
 
 
-class IV_dark():
+class IVDark():
 
     def __init__(self, fname, cell):
         self.cell = cell
@@ -240,7 +210,7 @@ class IV_dark():
         ax.legend(loc='best')
 
     def load(self, raw_data_file):
-        '''Loads Dark IV data in cell attributes'''
+        '''Loads Dark IV data in attributes'''
         self.filepath = raw_data_file
         self.filename = os.path.basename(raw_data_file)
 
@@ -340,7 +310,7 @@ class Reflection():
         # ax.grid(True)
 
     def load(self, raw_data_file):
-        '''Loads Reflectance data in cell attributes'''
+        '''Loads Reflectance data in attributes'''
         self.filepath = raw_data_file
         self.filename = os.path.basename(raw_data_file)
 
@@ -368,7 +338,7 @@ class QE():
         Performs several calculations from QE and Reflectance data including:
         - IQE
         - Leff and SRV_rear
-        the results are saved into cell attributes
+        the results are saved into attributes
         '''
         self.IQE = 100 * self.EQE / (100 - refl)
 
@@ -389,7 +359,7 @@ class QE():
         ax.grid(True)
 
     def load(self, raw_data_file):
-        '''Loads EQE data into cell attributes'''
+        '''Loads EQE data into attributes'''
         self.filepath = raw_data_file
         self.filename = os.path.basename(raw_data_file)
 
@@ -402,41 +372,76 @@ class QE():
         f = open(raw_data_file, 'r')
         d = {}
         for line in f.readlines()[-7:-1]:
-            # d.update(dict(re.findall(r'([\s\S]+)\s*:\s\s([^\n]+)', line)))
-            d.update(dict([line.strip('\n').split(':')]))     # alternative
+            d.update(dict([line.strip('\n').split(':')]))
 
         self.output = d
 
 
-class loss_analysis_handeller():
+class LossAnalysisHandler():
 
+    # TODO: pass as dict instead of **args ?
     def __init__(self, **args):
-        print(args.keys())
-        # containts t he information about the cell
-        # this should get around.
+        self.sample_names = {}
+        self.input_errors = {}
         self.cell = Cell()
         self.reflection = Reflection(args['reflectance_fname'])
         self.qe = QE(args['EQE_fname'])
-        self.sunvoc = IV_suns(args['suns Voc_fname'], self.cell)
-        self.liv = IV_light(args['light IV_fname'], self.cell)
-        self.div = IV_dark(args['dark IV_fname'], self.cell)
+        self.sunsVoc = IVSuns(args['suns Voc_fname'], self.cell)
+        self.liv = IVLight(args['light IV_fname'], self.cell)
+        self.div = IVDark(args['dark IV_fname'], self.cell)
 
+    def check_input_vals(self):
+        '''
+        Check the input cell parameters are consistent between measurements.
+        Gives the error as a percentage.
+        '''
+        # TODO:
+        # check whether data is loaded
 
-# print and plot #############################################################
+        # sample names
+        self.sample_names['Light IV'] = self.liv.output['Cell Name ']
+        self.sample_names['Suns Voc'] = self.sunsvoc.output['Sample Name']
+        self.sample_names['Dark IV'] = self.div.output['Cell Name']
+
+        # Cell area
+        # tolerance = 1e-3
+        liv = self.liv.output['Cell Area (sqr cm)']
+        div = self.div.output['Cell Area in sqr cm']
+        delta = (div - liv) / liv
+        self.input_errors['Cell Area'] = delta
+
+        # thickness
+        user_input_t = self.cell.thickness
+        sunsVoc_t = self.sunsvoc.output['Wafer Thickness (cm)']
+        delta = (sunsVoc_t - user_input_t) / user_input_t
+        self.input_errors['Cell thickness'] = delta
+
+        # Voc
+        liv = self.liv.output['Voc']
+        div = self.sunsVoc.output['Voc (V)']
+        delta = (div - liv) / liv
+        self.input_errors['Voc'] = delta
+
+        # Jsc
+        liv = self.liv.output['Jsc']
+        iqe = self.qe.output['Jsc']
+        delta = (div - liv) / liv
+        self.input_errors['Jsc'] = delta
 
     def collect_outputs(self):
-        '''Temp hack'''
-        # TODO: improve this
+        '''Print input and output parameters to file or terminal'''
 
         output_list = []
 
         def quick_print(key, val):
-            output_list.append('{:>30}, {:>20}'.format(key, val))
+            output_list.append('{:>30}, {:<20}'.format(key, val))
 
         output_list.append('\n')
         quick_print('##### Sample names', '',)
 
-        for key, val in self.cell.input_errors.items():
+        for key, val in self.sample_names.items():
+            quick_print(key, '{:.3e}'.format(val))
+        for key, val in self.input_errors.items():
             quick_print(key, '{:.3e}'.format(val))
 
         output_list.append('\n')
@@ -461,8 +466,8 @@ class loss_analysis_handeller():
 
         output_list.append('\n')
         quick_print('##### Suns Voc', '')
-        quick_print('Suns-Voc filename', self.sunvoc.filename)
-        for key, val in self.sunvoc.output.items():
+        quick_print('Suns-Voc filename', self.sunsVoc.filename)
+        for key, val in self.sunsVoc.output.items():
             quick_print(key, val)
 
         output_list.append('\n')
@@ -488,7 +493,7 @@ class loss_analysis_handeller():
                            + '_loss_analysis_summary.csv', 'w')
 
         for item in self.output_list:
-            print(item)
+            # print(item)
             output_file.write(item + '\r\n')
 
         output_file.close()
@@ -518,9 +523,9 @@ class loss_analysis_handeller():
         self.qe.plot_EQE(ax_QE)
         self.qe.plot_IQE(ax_QE)
 
-        self.sunvoc.plot_m(ax_ideality)
-        self.sunvoc.plot_IV(ax_lightIV)
-        self.sunvoc.plot_tau(ax_tau)
+        self.sunsVoc.plot_m(ax_ideality)
+        self.sunsVoc.plot_IV(ax_lightIV)
+        self.sunsVoc.plot_tau(ax_tau)
         self.liv.plot(ax_lightIV)
 
         self.div.plot_IV(ax_darkIV)
@@ -528,15 +533,15 @@ class loss_analysis_handeller():
 
         self.plot_Basore_fit(ax_QE_fit)
         line_EQE, = self.qe.plot_EQE(ax_QE_layered)
-        line_EQE.set_marker('v')
+        # line_EQE.set_marker('x')
         self.reflection.plot_QE(ax_QE_layered)
 
         fig_QE.set_tight_layout(True)
         fig_IV.set_tight_layout(True)
 
-        # fig_QE.savefig(self.lightIV_output['Cell Name ']
+        # fig_QE.savefig(self.liv.output['Cell Name ']
         #             + '_QE.png')
-        # fig_IV.savefig(self.lightIV_output['Cell Name ']
+        # fig_IV.savefig(self.liv.output['Cell Name ']
         #             + '_IV.png')
         for i in [fig_QE, fig_IV]:
             i.show()
@@ -544,22 +549,19 @@ class loss_analysis_handeller():
     def process_all(self):
         '''Call all calculations, plot and print outputs'''
 
-        # most of these methods return function objects to plot default output
-        # self.check_input_vals()
-
-        self.sunvoc.process()
+        self.sunsVoc.process()
         self.reflection.process()
         self.qe.process(self.reflection.refl)
         self.cell.Rsh = self.div.process()
 
         self.cell.Rs_1 = analysis.Rs_calc_1(self.liv.output['Vmp'],
                                             self.liv.output['Jmp'],
-                                            self.sunvoc.V, self.sunvoc.J)
+                                            self.sunsVoc.V, self.sunsVoc.J)
 
         self.cell.Rs_2 = analysis.Rs_calc_2(self.liv.output['Voc'],
                                             self.liv.output['Jsc'],
                                             self.liv.output['FF'],
-                                            self.sunvoc.output['PFF'])
+                                            self.sunsVoc.output['PFF'])
 
         self.cell = self.liv.process()
 
@@ -573,61 +575,15 @@ class loss_analysis_handeller():
 
 
 class Cell(object):
-    # this seems very involved, maybe split up into component class for the different types
-    # loading data ###########################################################
 
     def __init__(self, thickness=0.019):
-        # cell parameters TODO: update and check
         self.thickness = thickness  # [cm]
-        self.input_errors = {}
-        self.sample_names = {}
         self.Rs_1 = None
         self.Rsh = None
-        # self.AM15G_wl = np.genfromtxt('AM1.5G_spectrum.dat', usecols=(0,),
-        #                               skip_header=1)
-        # self.AM15G_Jph = np.genfromtxt('AM1.5G_spectrum.dat', usecols=(1,),
-        #                                skip_header=1)
-        # self.AM15G_Jph_sum = np.sum(self.AM15G_Jph)
-        # self.alpha_data = np.genfromtxt('Si_alpha_Green_2008.dat', usecols=(0,1),
-        #    skip_header=1).transpose()
-        T = 300   # make optional input?
+        T = 300   # TODO: make optional input?
         self.Vth = constants.k * T / constants.e
 
-    def check_input_vals(self):
-        '''
-        Check the input cell parameters are consistent between measurements.
-        Gives the error as a percentage.
-        '''
-        # TODO: finish
-        # check whether data is loaded
-
-        # sample names
-        self.sample_names['Light IV'] = self.lightIV_output['Cell Name ']
-        self.sample_names['Suns Voc'] = self.sunsVoc_params['Sample Name']
-        self.sample_names['Dark IV'] = self.darkIV_output['Cell Name']
-
-        # Cell area
-        # tolerance = 1e-3
-        liv = self.lightIV_output['Cell Area (sqr cm)']
-        div = self.darkIV_output['Cell Area in sqr cm']
-        delta = (div - liv) / liv
-        self.input_errors['Cell Area'] = delta
-
-        # Voc
-        liv = self.lightIV_output['Voc']
-        div = self.sunsVoc_output['Voc (V)']
-        delta = (div - liv) / liv
-        self.input_errors['Voc'] = delta
-
-        # thickness
-        user_input_t = self.thickness
-        sunsVoc_t = self.sunsVoc_params['Wafer Thickness (cm)']
-        delta = (sunsVoc_t - user_input_t) / user_input_t
-        self.input_errors['Cell thickness'] = delta
-
-
 if __name__ == "__main__":
-    # pwd = '/home/ned/Dropbox/unsw/python_scripts/loss analysis/'
     # pwd = os.getcwd()
 
     # cell1 = Cell()
@@ -642,7 +598,8 @@ if __name__ == "__main__":
     # # print(cell1.fit_Isenberg(cell1.QE_wl, cell1.IQE))
     # cell1.plot()
 
-    example_dir = os.path.abspath(os.pardir + '/example_cell/')
+    # example_dir = os.path.abspath(os.pardir + '/example_cell/')
+    example_dir = os.path.join(os.path.pardir(os.path.dirname(__file__)), '/example_cell/')
     # pwd = os.path.join(pwd, b_dir)
     b = Cell()
 

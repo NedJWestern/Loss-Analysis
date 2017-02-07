@@ -7,7 +7,8 @@ from PyQt5.QtWidgets import (QWidget, QFileDialog, QPushButton, QTextEdit,
 import loss_analysis
 
 
-class load_button_combo(QWidget):
+class LoadButtonCombo(QWidget):
+#TODO: couldn't this whole class just be a single function?
 
     def __init__(self, grid, info, default_file, row, column):
         super().__init__()
@@ -49,7 +50,7 @@ class load_button_combo(QWidget):
         return {self.info + '_fname': self.filepath}
 
 
-class Loss_analysis_gui(QWidget):
+class LossAnalysisGui(QWidget):
 
     def __init__(self):
         super().__init__()
@@ -71,13 +72,10 @@ class Loss_analysis_gui(QWidget):
 
         self.items = []
 
+        # TODO Ned: I'm not convinced this is the best method
         for box, row_num in zip(boxes, range(len(boxes))):
-
-            self.items.append(load_button_combo(grid, box[0],
-                                                box[1], row_num + 1, 0))
-
-        # self.eqe = load_button_combo(grid, 'EQE',
-        #                              'example_EQE.csv', 2, 0)
+            self.items.append(LoadButtonCombo(grid, box[0], box[1],
+                                              row_num + 1, 0))
 
         # process all data
         self.btn_process = QPushButton("Process data")
@@ -95,8 +93,8 @@ class Loss_analysis_gui(QWidget):
         for i in self.items:
             files.update(i.file())
 
-        # pass the file names, and let the next thing handell them.
-        la = loss_analysis.loss_analysis_handeller(**files)
+        # pass the file names, and let the next thing handle them.
+        la = loss_analysis.LossAnalysisHandler(**files)
         la.process_all()
 
 
@@ -105,7 +103,7 @@ if __name__ == '__main__':
     logfile = open('traceback_log.txt', 'w')
     app = QApplication(sys.argv)
     # try:
-    ex = Loss_analysis_gui()
+    ex = LossAnalysisGui()
     # except:
     # traceback.print_exc(file=logfile)
 

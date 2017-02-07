@@ -79,10 +79,10 @@ path = os.sep.join(os.path.dirname(os.path.realpath(__file__)).split(os.sep)[:-1
 
 def AM15G_resample(wl):
     '''Returns AM1.5G spectrum at given wavelengths'''
-    AM15G_wl = np.genfromtxt(os.path.join(path,'constants', 'AM1.5G_spectrum.dat'), usecols=(0,),
-                                  skip_header=1)
-    AM15G_Jph = np.genfromtxt(os.path.join(path,'constants', 'AM1.5G_spectrum.dat'), usecols=(1,),
-                                   skip_header=1)
+    AM15G_wl = np.genfromtxt(os.path.join(path,'constants', 'AM1.5G_spectrum.dat'),
+                             usecols=(0,), skip_header=1)
+    AM15G_Jph = np.genfromtxt(os.path.join(path,'constants', 'AM1.5G_spectrum.dat'),
+                              usecols=(1,), skip_header=1)
     return np.interp(wl, AM15G_wl, AM15G_Jph)
 
 def find_nearest(x_val, xdata, ydata=None):
