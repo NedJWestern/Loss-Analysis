@@ -18,7 +18,179 @@ T = 300   # TODO: make optional input?
 Vth = constants.k * T / constants.e
 
 
-class IVSuns():
+class Refl(object):
+
+    def __init__(self, fname):
+        self.load(fname)
+
+    def process(self, f_metal=None, wlbounds=(900, 1000)):
+        '''
+        Performs several calculations including:
+        - Weighted Average Reflection (WAR)
+        - Light lost from front surface escape
+        the results are loaded into attributes
+        '''
+
+        # exit early if data isn't loaded
+        try:
+            self.refl
+        except AttributeError:
+            print("Reflection data not loaded")
+            return
+
+        self.AM15G_Jph = analysis.AM15G_resample(self.wl)
+        i_upper = (self.wl <= 1000)
+        self.WAR = (np.dot(self.refl[i_upper], self.AM15G_Jph[i_upper])
+                    / np.sum(self.AM15G_Jph[i_upper]))
+
+        if f_metal is None:
+            index = (self.wl >= 400) * i_upper
+            refl_min = np.amin(self.refl[index])
+            self.f_metal = refl_min
+        else:
+            self.f_metal = f_metal
+
+        index_l = (self.wl >= wlbounds[0])
+        index = (self.wl <= wlbounds[1]) * index_l
+
+        # use numpys implementation for line fitting
+        popt, pcov = np.polyfit(self.wl[index], self.refl[index], 1, cov=True)
+
+        self.refl_wo_escape = np.copy(self.refl)
+        self.refl_wo_escape[index_l] = np.polyval(popt, self.wl[index_l])
+
+        Jloss = {}
+        Jloss['R'] = np.dot(self.refl, self.AM15G_Jph)
+        Jloss['R_wo_escape'] = np.dot(self.refl_wo_escape, self.AM15G_Jph)
+        self.Jloss = Jloss
+
+    def plot(self, ax):
+        ax.plot(self.wl, self.refl, '-o')
+        ax.plot(self.wl, self.refl_wo_escape, '-o')
+        ax.plot(self.wl, np.ones(len(self.wl)) * self.f_metal, 'r-')
+        ax.set_ylabel('Reflectance [%]')
+        ax.grid(True)
+
+    def plot_QE(self, ax):
+        ax.fill_between(self.wl, 100 - self.refl,
+                        100 - self.refl_wo_escape)
+        ax.legend(loc='best')
+        # ax.set_ylabel('Reflectance [%]')
+        # ax.grid(True)
+
+    def load(self, raw_data_file):
+        '''Loads Reflectance data in attributes'''
+        self.filepath = raw_data_file
+        self.filename = os.path.basename(raw_data_file)
+
+        data_array = np.genfromtxt(raw_data_file, usecols=(0, 1), skip_header=1,
+                                   delimiter=',')
+        self.wl = data_array[:, 0]
+        self.refl = data_array[:, 1]
+
+class QE(object):
+
+    def __init__(self, fname):
+        self.load(fname)
+
+    def process(self, refl):
+        '''
+        Performs several calculations from QE and Reflectance data including:
+        - IQE
+        - Leff and SRV_rear
+        the results are saved into attributes
+        '''
+        self.IQE = 100 * self.EQE / (100 - refl)
+
+        self.output_Basore_fit, self.plot_Basore_fit = analysis.fit_Basore(
+            self.wl, self.IQE)
+
+    def plot_EQE(self, ax):
+
+        line_EQE = ax.plot(self.wl, self.EQE, '-o', label='EQE')
+        ax.set_xlabel('Wavelength [$nm$]')
+        ax.set_ylabel('QE [%]')
+        ax.legend(loc='best')
+        ax.grid(True)
+        return line_EQE     # currently not working
+
+    def plot_IQE(self, ax):
+        ax.plot(self.wl, self.IQE, '-o', label='IQE')
+        ax.set_xlabel('Wavelength [$nm$]')
+        ax.set_ylabel('QE [%]')
+        ax.legend(loc='best')
+        ax.grid(True)
+
+    def load(self, raw_data_file):
+        '''Loads EQE data into attributes'''
+        self.filepath = raw_data_file
+        self.filename = os.path.basename(raw_data_file)
+
+        # the other columns are ignored
+        data_array = np.genfromtxt(raw_data_file, usecols=(0, 1),
+                                   skip_header=1, skip_footer=8)
+        self.wl = data_array[:, 0]
+        self.EQE = data_array[:, 1]
+
+        f = open(raw_data_file, 'r')
+        d = {}
+        for line in f.readlines()[-7:-1]:
+            d.update(dict([line.strip('\n').split(':')]))
+
+        d['Jsc'] = float(d['Jsc']) / 1e3  # TODO: not working
+        self.output = d
+
+class IVLight(object):
+
+    def __init__(self, fname):
+        self.load(fname)
+
+    def process(self, Rsh, Rs):
+        '''Light IV calculations'''
+
+        FFo, FFs, FF = analysis.FF_ideal(self.output['Voc'],
+                                         Jsc=self.output['Jsc'], Rs=Rs, Rsh=Rsh)
+
+        self.FF_vals = {}
+        self.FF_vals['FFo'] = FFo
+        self.FF_vals['FFs'] = FFs
+        self.FF_vals['FF'] = FF
+
+    def plot(self, ax):
+        ax.plot(self.V, self.J, '-o', label='light IV')
+        ax.set_xlabel('Voltage [$V$]')
+        ax.set_ylabel('Current Density [$A cm^{-2}$]')
+        ax.grid(True)
+        # ax.legend(loc='best')
+
+    def load(self, raw_data_file):
+        '''Loads Light IV data in attributes'''
+        self.filepath = raw_data_file
+        self.filename = os.path.basename(raw_data_file)
+
+        f = open(raw_data_file, 'r')
+        d = OrderedDict()
+        # rows which contain floats in lightIV data file header
+        float_rows = [2]
+        float_rows.extend(list(range(6, 18)))
+        for i, line in enumerate(f.readlines()[1:19]):
+            # convert to float for future calculations
+            if i in float_rows:
+                key_temp, val = line.strip('\n').split(':\t')
+                key = key_temp.strip()
+                d[key] = float(val)
+            else:
+                # d.update(dict(re.findall(r'([\s\S]+)\s*:\t([^\n]+)', line)))
+                d.update(dict([line.strip('\n').split(':\t')]))
+
+        data_array = np.genfromtxt(raw_data_file, skip_header=20)
+        self.V = data_array[:, 0]
+        self.J = data_array[:, 1] / d['Cell Area (sqr cm)']
+        # TODO: error check for nans and 1e12?
+
+        self.output = d
+
+class IVSuns(object):
     filepath = None
     filename = None
 
@@ -80,6 +252,9 @@ class IVSuns():
 
             # TODO: I know this list() is shite, temporary workaround for my old
             # openpyxl install
+            # try: ??
+            # np.asarray(xlSheet.Range("A9:I133").Value, dtype=np.float64)
+
             params = [i.value for i in list(ws_User['A5':'F5'])[0]]
             vals = [i.value for i in list(ws_User['A6':'F6'])[0]]
             self.params = dict(zip(params, vals))
@@ -98,59 +273,7 @@ class IVSuns():
         self.Dn = data_array[:, 4]
         self.tau_eff = data_array[:, 5]
 
-
-class IVLight():
-
-    def __init__(self, fname):
-        self.load(fname)
-
-    def process(self, Rsh, Rs):
-        '''Light IV calculations'''
-
-        FFo, FFs, FF = analysis.FF_ideal(self.output['Voc'],
-                                         Jsc=self.output['Jsc'], Rs=Rs, Rsh=Rsh)
-
-        self.FF_vals = {}
-        self.FF_vals['FFo'] = FFo
-        self.FF_vals['FFs'] = FFs
-        self.FF_vals['FF'] = FF
-
-    def plot(self, ax):
-        ax.plot(self.V, self.J, '-o', label='light IV')
-        ax.set_xlabel('Voltage [$V$]')
-        ax.set_ylabel('Current Density [$A cm^{-2}$]')
-        ax.grid(True)
-        # ax.legend(loc='best')
-
-    def load(self, raw_data_file):
-        '''Loads Light IV data in attributes'''
-        self.filepath = raw_data_file
-        self.filename = os.path.basename(raw_data_file)
-
-        f = open(raw_data_file, 'r')
-        d = OrderedDict()
-        # rows which contain floats in lightIV data file header
-        float_rows = [2]
-        float_rows.extend(list(range(6, 18)))
-        for i, line in enumerate(f.readlines()[1:19]):
-            # convert to float for future calculations
-            if i in float_rows:
-                key_temp, val = line.strip('\n').split(':\t')
-                key = key_temp.strip()
-                d[key] = float(val)
-            else:
-                # d.update(dict(re.findall(r'([\s\S]+)\s*:\t([^\n]+)', line)))
-                d.update(dict([line.strip('\n').split(':\t')]))
-
-        data_array = np.genfromtxt(raw_data_file, skip_header=20)
-        self.V = data_array[:, 0]
-        self.J = data_array[:, 1] / d['Cell Area (sqr cm)']
-        # TODO: error check for nans and 1e12?
-
-        self.output = d
-
-
-class IVDark():
+class IVDark(object):
 
     def __init__(self, fname):
         self.load(fname)
@@ -213,139 +336,17 @@ class IVDark():
         self.J = data_array[:, 1] / d['Cell Area in sqr cm']
         # TODO: error check for nans and 1e12?
 
-
-class Reflection():
-
-    def __init__(self, fname):
-        self.load(fname)
-
-    def process(self, f_metal=None, wlbounds=(900, 1000)):
-        '''
-        Performs several calculations including:
-        - Weighted Average Reflection (WAR)
-        - Light lost from front surface escape
-        the results are loaded into attributes
-        '''
-
-        # exit early if data isn't loaded
-        try:
-            self.refl
-        except AttributeError:
-            print("Reflection data not loaded")
-            return
-
-        self.AM15G_Jph = analysis.AM15G_resample(self.wl)
-        i_upper = (self.wl <= 1000)
-        self.WAR = (np.dot(self.refl[i_upper], self.AM15G_Jph[i_upper])
-                    / np.sum(self.AM15G_Jph[i_upper]))
-
-        if f_metal is None:
-            index = (self.wl >= 400) * i_upper
-            refl_min = np.amin(self.refl[index])
-            self.f_metal = refl_min
-        else:
-            self.f_metal = f_metal
-
-        index_l = (self.wl >= wlbounds[0])
-        index = (self.wl <= wlbounds[1]) * index_l
-
-        # use numpys implementation for line fitting
-        popt, pcov = np.polyfit(self.wl[index], self.refl[index], 1, cov=True)
-
-        self.refl_wo_escape = np.copy(self.refl)
-        self.refl_wo_escape[index_l] = np.polyval(popt, self.wl[index_l])
-
-        Jloss = {}
-        Jloss['R'] = np.dot(self.refl, self.AM15G_Jph)
-        Jloss['R_wo_escape'] = np.dot(self.refl_wo_escape, self.AM15G_Jph)
-        self.Jloss = Jloss
-
-    def plot(self, ax):
-        ax.plot(self.wl, self.refl, '-o')
-        ax.plot(self.wl, self.refl_wo_escape, '-o')
-        ax.set_ylabel('Reflectance [%]')
-        ax.grid(True)
-
-    def plot_QE(self, ax):
-        ax.fill_between(self.wl, 100 - self.refl,
-                        100 - self.refl_wo_escape)
-        ax.legend(loc='best')
-        # ax.set_ylabel('Reflectance [%]')
-        # ax.grid(True)
-
-    def load(self, raw_data_file):
-        '''Loads Reflectance data in attributes'''
-        self.filepath = raw_data_file
-        self.filename = os.path.basename(raw_data_file)
-
-        data_array = np.genfromtxt(raw_data_file, usecols=(0, 1), skip_header=1,
-                                   delimiter=',')
-        self.wl = data_array[:, 0]
-        self.refl = data_array[:, 1]
-
-
-class QE():
-
-    def __init__(self, fname):
-        self.load(fname)
-
-    def process(self, refl):
-        '''
-        Performs several calculations from QE and Reflectance data including:
-        - IQE
-        - Leff and SRV_rear
-        the results are saved into attributes
-        '''
-        self.IQE = 100 * self.EQE / (100 - refl)
-
-    def plot_EQE(self, ax):
-
-        line_EQE = ax.plot(self.wl, self.EQE, '-o', label='EQE')
-        ax.set_xlabel('Wavelength [$nm$]')
-        ax.set_ylabel('QE [%]')
-        ax.legend(loc='best')
-        ax.grid(True)
-        return line_EQE     # currently not working
-
-    def plot_IQE(self, ax):
-        ax.plot(self.wl, self.IQE, '-o', label='IQE')
-        ax.set_xlabel('Wavelength [$nm$]')
-        ax.set_ylabel('QE [%]')
-        ax.legend(loc='best')
-        ax.grid(True)
-
-    def load(self, raw_data_file):
-        '''Loads EQE data into attributes'''
-        self.filepath = raw_data_file
-        self.filename = os.path.basename(raw_data_file)
-
-        # the other columns are ignored
-        data_array = np.genfromtxt(raw_data_file, usecols=(0, 1),
-                                   skip_header=1, skip_footer=8)
-        self.wl = data_array[:, 0]
-        self.EQE = data_array[:, 1]
-
-        f = open(raw_data_file, 'r')
-        d = {}
-        for line in f.readlines()[-7:-1]:
-            d.update(dict([line.strip('\n').split(':')]))
-
-        d['Jsc'] = float(d['Jsc']) / 1e3  # TODO: not working
-        self.output = d
-
-
 class Cell(object):
 
-    # TODO: pass as dict instead of **args ?
-    def __init__(self, thickness=0.019, **args):
+    def __init__(self, thickness=0.019, **kwargs):
         self.thickness = thickness  # [cm]
         self.sample_names = {}
         self.input_errors = {}
-        self.reflection = Reflection(args['reflectance_fname'])
-        self.qe = QE(args['EQE_fname'])
-        self.sunsVoc = IVSuns(args['suns Voc_fname'])
-        self.div = IVDark(args['dark IV_fname'])
-        self.liv = IVLight(args['light IV_fname'])
+        self.refl = Refl(kwargs['reflectance_fname'])
+        self.qe = QE(kwargs['EQE_fname'])
+        self.sunsVoc = IVSuns(kwargs['suns Voc_fname'])
+        self.div = IVDark(kwargs['dark IV_fname'])
+        self.liv = IVLight(kwargs['light IV_fname'])
         self.check_input_vals()
 
     def check_input_vals(self):
@@ -404,27 +405,31 @@ class Cell(object):
 
         output_list.append('\n')
         quick_print('##### Reflectance', '')
-        quick_print('Reflectance filename', self.reflection.filename)
-        quick_print('WAR', '{:.3e}'.format(self.reflection.WAR))
-        quick_print('f_metal', '{:.3e}'.format(self.reflection.f_metal))
-        for key, val in self.reflection.Jloss.items():
-            quick_print(key, '{:.3e}'.format(val))
+        quick_print('filename', self.refl.filename)
+        quick_print('WAR', '{:.3f}'.format(self.refl.WAR))
+        quick_print('f_metal', '{:.3f}'.format(self.refl.f_metal))
+        for key, val in self.refl.Jloss.items():
+            quick_print(key, '{:.3f}'.format(val))
 
         output_list.append('\n')
         quick_print('##### QE', '')
-        quick_print('EQE filename', self.qe.filename)
+        quick_print('filename', self.qe.filename)
         for key, val in self.qe.output.items():
             quick_print(key, val)
+        quick_print('Basore fit Leff', '{:.3e}'.format(
+            self.qe.output_Basore_fit['Leff']))
+        quick_print('Basore fit etc_c', '{:.3f}'.format(
+            self.qe.output_Basore_fit['eta_c']))
 
         output_list.append('\n')
         quick_print('##### Light IV', '')
-        quick_print('EQE filename', self.liv.filename)
+        quick_print('filename', self.liv.filename)
         for key, val in self.liv.output.items():
             quick_print(key, val)
 
         output_list.append('\n')
         quick_print('##### Suns Voc', '')
-        quick_print('Suns-Voc filename', self.sunsVoc.filename)
+        quick_print('filename', self.sunsVoc.filename)
         for key, val in self.sunsVoc.params.items():
             quick_print(key, val)
         for key, val in self.sunsVoc.output.items():
@@ -432,7 +437,7 @@ class Cell(object):
 
         output_list.append('\n')
         quick_print('##### Dark IV', '')
-        quick_print('EQE filename', self.div.filename)
+        quick_print('filename', self.div.filename)
         for key, val in self.div.output.items():
             quick_print(key, val)
 
@@ -453,7 +458,6 @@ class Cell(object):
                            + '_loss_analysis_summary.csv', 'w')
 
         for item in self.output_list:
-            print(item)
             output_file.write(item + '\r\n')
 
         output_file.close()
@@ -478,8 +482,8 @@ class Cell(object):
         ax_lightIV = fig_IV.add_subplot(2, 2, 2)
         ax_tau = fig_IV.add_subplot(2, 2, 4)
 
-        self.reflection.plot(ax_refl)
-        self.reflection.plot(ax_QE)
+        self.refl.plot(ax_refl)
+        self.refl.plot(ax_QE)
         self.qe.plot_EQE(ax_QE)
         self.qe.plot_IQE(ax_QE)
 
@@ -491,10 +495,21 @@ class Cell(object):
         self.div.plot_IV(ax_darkIV)
         self.div.plot_m(ax_ideality)
 
-        self.plot_Basore_fit(ax_QE_fit)
-        line_EQE, = self.qe.plot_EQE(ax_QE_layered)
+        self.qe.plot_Basore_fit(ax_QE_fit)
+
+        dummy_ones = np.ones(len(self.refl.wl))
+        ax_QE_layered.fill_between(self.refl.wl, dummy_ones * 100,
+                                   100 - dummy_ones * self.refl.f_metal,  color='blue')
+        ax_QE_layered.fill_between(self.refl.wl,
+                                   100 - dummy_ones * self.refl.f_metal,
+                                   100 - self.refl.refl_wo_escape, color='green')
+        ax_QE_layered.fill_between(self.refl.wl, 100 - self.refl.refl,
+                                   100 - self.refl.refl_wo_escape, color='red')
+        ax_QE_layered.fill_between(self.refl.wl, 100 - self.refl.refl,
+                                   self.qe.EQE, color='cyan')
+        # line_EQE, = self.qe.plot_EQE(ax_QE_layered)
         # line_EQE.set_marker('x')
-        self.reflection.plot_QE(ax_QE_layered)
+        # self.refl.plot_QE(ax_QE_layered)
 
         fig_QE.set_tight_layout(True)
         fig_IV.set_tight_layout(True)
@@ -503,15 +518,15 @@ class Cell(object):
         #             + '_QE.png')
         # fig_IV.savefig(self.liv.output['Cell Name ']
         #             + '_IV.png')
-        for i in [fig_QE, fig_IV]:
-            i.show()
+
+        plt.show()
 
     def process_all(self):
-        '''Call all calculations, plot and print outputs'''
+        '''Call all calculations'''
 
         self.sunsVoc.process()
-        self.reflection.process()
-        self.qe.process(self.reflection.refl)
+        self.refl.process()
+        self.qe.process(self.refl.refl)
         self.Rsh = self.div.process()
 
         self.Rs_1 = analysis.Rs_calc_1(self.liv.output['Vmp'],
@@ -526,14 +541,20 @@ class Cell(object):
         self.liv.process(self.Rsh, self.Rs_1)
         # self.cell = self.liv.process()      # this is weird
 
-        vals, self.plot_Basore_fit = analysis.fit_Basore(
-            self.qe.wl, self.qe.IQE)
-
         self.collect_outputs()
         self.print_output_to_file()
         self.plot_all()
 
 
 if __name__ == "__main__":
-    # TODO: reimplement
-    pass
+
+    example_dir = os.path.join(os.pardir, 'example_cell')
+    files = {
+        'reflectance_fname': os.path.join(example_dir, 'example_reflectance.csv'),
+        'EQE_fname': os.path.join(example_dir, 'example_EQE.txt'),
+        'light IV_fname': os.path.join(example_dir, 'example_lightIV.lgt'),
+        'suns Voc_fname': os.path.join(example_dir, 'example_sunsVoc.xlsm'),
+        'dark IV_fname': os.path.join(example_dir, 'example_darkIV.drk') }
+
+    cell1 = Cell(**files)
+    cell1.process_all()

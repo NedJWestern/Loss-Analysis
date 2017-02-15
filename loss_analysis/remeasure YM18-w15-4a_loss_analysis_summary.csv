@@ -1,9 +1,9 @@
 
 
             ##### Check inputs,                     
-                       Dark IV, Remeasure ym18-w15-4a
                       Suns Voc, remeasure YM18-w15-4a
                       Light IV, remeasure YM18-w15-4a
+                       Dark IV, Remeasure ym18-w15-4a
                            Jsc, -6.605e-02          
                 Cell thickness, -5.263e-02          
                      Cell Area, 0.000e+00           
@@ -11,25 +11,27 @@
 
 
              ##### Reflectance,                     
-          Reflectance filename, example_reflectance.csv
-                           WAR, 3.535e+00           
-                       f_metal, 1.069e+00           
-                   R_wo_escape, 3.807e+01           
-                             R, 4.893e+01           
+                      filename, example_reflectance.csv
+                           WAR, 3.535               
+                       f_metal, 1.069               
+                             R, 48.932              
+                   R_wo_escape, 38.073              
 
 
                       ##### QE,                     
-                  EQE filename, example_EQE.txt     
-                           Jsc, 0.036520000000000004
-           Monitor Corrections,   On                
+                      filename, example_EQE.txt     
                     Light Bias,   0.0 mA            
+                           Jsc, 0.036520000000000004
+                  Voltage Bias,   0.00              
+           Monitor Corrections,   On                
                 Chopping Speed,   119.96            
                  Sync Waveform,   Sine              
-                  Voltage Bias,   0.00              
+               Basore fit Leff, 5.707e-02           
+              Basore fit etc_c, 88.832              
 
 
                 ##### Light IV,                     
-                  EQE filename, example_lightIV.lgt 
+                      filename, example_lightIV.lgt 
                     Cell Name , remeasure YM18-w15-4a
                   Measured By , Sisi                
             Cell Area (sqr cm), 6.9                 
@@ -51,29 +53,29 @@
 
 
                 ##### Suns Voc,                     
-             Suns-Voc filename, example_sunsVoc.xlsm
+                      filename, example_sunsVoc.xlsm
                    Jsc (A/cm²), 0.039103            
-               Number of Cells, 1                   
+     Base Resistivity (Ohm-cm), 2                   
                    Sample Name, remeasure YM18-w15-4a
           Wafer Thickness (cm), 0.018               
                      Base Type, p-type              
-     Base Resistivity (Ohm-cm), 2                   
-                   Jo2 (A/cm²), 9.484486e-08        
+               Number of Cells, 1                   
+             Pseudo Efficiency, 18.58567            
+                   Jmp (A/cm²), 0.03480531          
+        Ideality (n) @ 0.1 sun, 2.935565            
+                       Voc (V), 0.6334519           
            Apparent Rs (W-cm²), 0.9214187           
-        Ideality (n)   @ 1 sun, 1.341345            
+                   Jo1 (A/cm²), 3.29671e-13         
+                   Jo2 (A/cm²), 9.484486e-08        
             Fitted Rsh (W-cm²), 558.8674            
                  Voc @ 0.1 sun, 0.5265459           
-                       Vmp (V), 0.5339895           
-                       Voc (V), 0.6334519           
-        Ideality (n) @ 0.1 sun, 2.935565            
-             Pseudo Efficiency, 18.58567            
-                   Jo1 (A/cm²), 3.29671e-13         
+        Ideality (n)   @ 1 sun, 1.341345            
                            PFF, 0.7503339           
-                   Jmp (A/cm²), 0.03480531          
+                       Vmp (V), 0.5339895           
 
 
                  ##### Dark IV,                     
-                  EQE filename, example_darkIV.drk  
+                      filename, example_darkIV.drk  
                      Cell Name, Remeasure ym18-w15-4a
            Cell Area in sqr cm, 6.9                 
                 Substrate Type, P type              

@@ -15,6 +15,7 @@ class LoadButtonCombo(QWidget):
 
         self.info = info
 
+        # TODO: I think this is equivalent to os.pardir
         path = os.sep.join(os.path.dirname(
             os.path.realpath(__file__)).split(os.sep)[:-1])
 
@@ -94,6 +95,7 @@ class LossAnalysisGui(QWidget):
             files.update(i.file())
 
         # pass the file names, and let the next thing handle them.
+        print(files)
         la = loss_analysis.Cell(**files)
         la.process_all()
 

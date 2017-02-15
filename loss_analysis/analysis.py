@@ -2,6 +2,7 @@ import numpy as np
 from scipy import constants
 from scipy.optimize import curve_fit
 import os
+from numpy.polynomial import polynomial as poly
 
 # helper functions ###########################################################
 
@@ -93,7 +94,7 @@ def find_nearest(x_val, xdata, ydata=None):
     '''
     idx = (np.abs(xdata - x_val)).argmin()
     if ydata is None:
-        return xdata[idx]
+        return idx
     else:
         return ydata[idx]
 
@@ -118,7 +119,7 @@ def fit_Basore(wavelength, IQE, theta=0, wlbounds=(1040, 1100)):
                 L_eff: the effective diffusion length (cm)
             a plotting function
 
-    See Basore (xxx year)
+    See Basore 1993
     doi:10.1109/PVSC.1993.347063
     '''
     index = (wavelength >= wlbounds[0]) * (wavelength <= wlbounds[1])
@@ -131,20 +132,21 @@ def fit_Basore(wavelength, IQE, theta=0, wlbounds=(1040, 1100)):
     fit_params = ['Leff']
     # TODO: is this not already a float?
     alpha = wl_to_alpha(wavelength) / float(np.cos(np.radians(theta)))
-    popt, pcov = np.polyfit(1. / alpha, 1. / IQE,1,cov=True)
+    coefs = poly.polyfit(1. / alpha, 1. / IQE, 1)
 
-    vals =  {elem: popt[i] for i, elem in enumerate(fit_params)}
+    # xxx check these calcs
+    fit_output =  {'Leff': coefs[1],
+                   'eta_c': 1 / coefs[0]}
 
     def plot_Basore_fit(ax):
         ax.plot(1. / alpha, 1. / IQE, '-o', label='data')
-        ax.plot(1. / alpha, np.polyval(popt, 1. / alpha),
-                label='fit_Basore')
+        ax.plot(1. / alpha, poly.polyval(1. / alpha, coefs), label='fit_Basore')
         ax.set_xlabel('$1/ \\alpha$ [$cm^2$]')
         ax.set_ylabel('$1/IQE$ []')
         ax.grid(True)
         ax.legend(loc='best')
 
-    return vals, plot_Basore_fit
+    return fit_output, plot_Basore_fit
 
 def Rs_calc_1(Vmp, Jmp, sunsVoc_V, sunsVoc_J):
     # TODO: not finished
