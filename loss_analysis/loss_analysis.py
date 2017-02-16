@@ -349,6 +349,9 @@ class Cell(object):
         self.liv = IVLight(kwargs['light IV_fname'])
         self.check_input_vals()
 
+        # TODO: not sure if this is the best
+        self.example_dir = os.path.join(os.pardir, 'example_cell')
+
     def check_input_vals(self):
         '''
         Check the input cell parameters are consistent between measurements.
@@ -454,15 +457,16 @@ class Cell(object):
 
     def print_output_to_file(self):
 
-        output_file = open(self.liv.output['Cell Name ']
-                           + '_loss_analysis_summary.csv', 'w')
+        filename = self.cell_name + '_loss_analysis_summary.csv'
+
+        output_file = open(os.path.join(self.output_dir, filename), 'w')
 
         for item in self.output_list:
             output_file.write(item + '\r\n')
 
         output_file.close()
 
-    def plot_all(self):
+    def plot_all(self, save_fig_bool):
         '''Plot the output of previous calculations'''
         # for reflectance
 
@@ -514,15 +518,23 @@ class Cell(object):
         fig_QE.set_tight_layout(True)
         fig_IV.set_tight_layout(True)
 
-        # fig_QE.savefig(self.liv.output['Cell Name ']
-        #             + '_QE.png')
-        # fig_IV.savefig(self.liv.output['Cell Name ']
-        #             + '_IV.png')
+        if save_fig_bool:
+            fig_QE.savefig(os.path.join(self.output_dir,
+                                        self.cell_name + '_QE.png'))
+            fig_IV.savefig(os.path.join(self.output_dir,
+                                        self.cell_name + '_IV.png'))
 
         plt.show()
 
-    def process_all(self):
+    def process_all(self, save_fig_bool, output_dir, cell_name):
         '''Call all calculations'''
+
+        if cell_name=='':
+            self.cell_name = self.liv.output['Cell Name ']
+        else:
+            self.cell_name = cell_name
+
+        self.output_dir = output_dir
 
         self.sunsVoc.process()
         self.refl.process()
@@ -539,11 +551,11 @@ class Cell(object):
                                             self.sunsVoc.output['PFF'])
 
         self.liv.process(self.Rsh, self.Rs_1)
-        # self.cell = self.liv.process()      # this is weird
 
         self.collect_outputs()
         self.print_output_to_file()
-        self.plot_all()
+        self.plot_all(save_fig_bool)
+
 
 
 if __name__ == "__main__":
