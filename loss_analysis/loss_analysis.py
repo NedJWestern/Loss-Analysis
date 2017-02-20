@@ -1,5 +1,4 @@
 # port "loss analysis v5.xlsx" by Ziv Hameiri to python3
-# requires python3
 
 import openpyxl
 import numpy as np
@@ -7,12 +6,9 @@ import os
 import re
 from collections import OrderedDict
 import matplotlib.pyplot as plt
-# from scipy.optimize import curve_fit
-import tkinter as tk
-from tkinter.filedialog import askopenfilename  # remove this?
 # modules for this package
-import analysis     # requires correct current directory, change? xxx
-from scipy import constants     # wow, did not know this existed
+import analysis
+from scipy import constants
 
 T = 300   # TODO: make optional input?
 Vth = constants.k * T / constants.e
@@ -30,13 +26,6 @@ class Refl(object):
         - Light lost from front surface escape
         the results are loaded into attributes
         '''
-
-        # exit early if data isn't loaded
-        try:
-            self.refl
-        except AttributeError:
-            print("Reflection data not loaded")
-            return
 
         self.AM15G_Jph = analysis.AM15G_resample(self.wl)
         i_upper = (self.wl <= 1000)
@@ -137,7 +126,7 @@ class QE(object):
         for line in f.readlines()[-7:-1]:
             d.update(dict([line.strip('\n').split(':')]))
 
-        d['Jsc'] = float(d['Jsc']) / 1e3  # TODO: not working
+        d['Jsc'] = round(float(d['Jsc']) / 1e3, 7)
         self.output = d
 
 class IVLight(object):
@@ -186,7 +175,6 @@ class IVLight(object):
         data_array = np.genfromtxt(raw_data_file, skip_header=20)
         self.V = data_array[:, 0]
         self.J = data_array[:, 1] / d['Cell Area (sqr cm)']
-        # TODO: error check for nans and 1e12?
 
         self.output = d
 
@@ -200,7 +188,6 @@ class IVSuns(object):
     def process(self):
         '''Suns Voc calculations'''
 
-        # Ideality factor, TODO: better method?
         self.m = 1 / Vth * self.effsuns \
             / (np.gradient(self.effsuns) / np.gradient(self.V))
 
@@ -282,8 +269,8 @@ class IVDark(object):
         '''Dark IV calculations'''
 
         # Ideality factor
-        self.m = 1 / Vth * self.J \
-            / (np.gradient(self.J) / np.gradient(self.V))
+        with np.errstate(divide='ignore', invalid='ignore'):
+            self.m = 1 / Vth * self.J / (np.gradient(self.J) / np.gradient(self.V))
 
         # Shunt resistance, at 30mV
         # TODO: do linear fit with zero intercept?
@@ -334,7 +321,6 @@ class IVDark(object):
             raw_data_file, usecols=(0, 1), skip_header=11)
         self.V = data_array[:, 0]
         self.J = data_array[:, 1] / d['Cell Area in sqr cm']
-        # TODO: error check for nans and 1e12?
 
 class Cell(object):
 
@@ -349,7 +335,6 @@ class Cell(object):
         self.liv = IVLight(kwargs['light IV_fname'])
         self.check_input_vals()
 
-        # TODO: not sure if this is the best
         self.example_dir = os.path.join(os.pardir, 'example_cell')
 
     def check_input_vals(self):
@@ -357,8 +342,6 @@ class Cell(object):
         Check the input cell parameters are consistent between measurements.
         Gives the error as a percentage.
         '''
-        # TODO:
-        # check whether data is loaded
 
         # sample names
         self.sample_names['Light IV'] = self.liv.output['Cell Name ']
@@ -421,7 +404,7 @@ class Cell(object):
             quick_print(key, val)
         quick_print('Basore fit Leff', '{:.3e}'.format(
             self.qe.output_Basore_fit['Leff']))
-        quick_print('Basore fit etc_c', '{:.3f}'.format(
+        quick_print('Basore fit eta_c', '{:.3f}'.format(
             self.qe.output_Basore_fit['eta_c']))
 
         output_list.append('\n')
@@ -449,9 +432,9 @@ class Cell(object):
         quick_print('Rsh', '{:.3e}'.format(self.Rsh))
         quick_print('Rs1', '{:.3e}'.format(self.Rs_1))
         quick_print('Rs2', '{:.3e}'.format(self.Rs_2))
-        # TODO: fix this
-        # for key, val in self.FF_vals.items():
-        #     quick_print(key, '{:.3e}'.format(val))
+
+        for key, val in self.liv.FF_vals.items():
+            quick_print(key, '{:.3f}'.format(val))
 
         self.output_list = output_list
 

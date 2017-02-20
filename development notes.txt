@@ -4,13 +4,10 @@ NOTES:
 
 TODO:
 - see in-text TODOs and xxx
-- check file extensions
-- check user input cell_name as valid filename
+- fix openpyxl install
+- write tests, at least for functions in analysis.py
 - add pie charts or waterfall plots for loss analysis
-- move some helper functions to another module?
-- change load functions into pure functions returning dictionaries, then use
-decorators to load attributes?
-- user input for some parameters (eg. wafer thickness)
+- arbitrary input params, to plot against separately? (perhaps too much work)
 - create dependency tree for calculations (QE and IV are almost separate)
 - robust to having missing data?
 - return covariance for every fitting parameter?
@@ -19,16 +16,6 @@ decorators to load attributes?
 waterfall charts:
 - http://tooblippe.github.io/waterfall/
 - http://pbpython.com/waterfall-chart.html
-
-Coding notes:
-- Q: Why don't the methods to load data return values instead of setting class
-    attributes, doesn't this make this code less reusable?
-    - Ans: These methods are only run once per instance and do not have any
-    feedback, so they are stable. This code should be self contained, so will
-    not be reused elsewhere.
-- Q: Why do the process functions return function objects?
-    - Ans: To make the functions 'pure functions' and more reusable
-
 
 
 notes on package structure:

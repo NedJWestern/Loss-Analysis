@@ -10,7 +10,7 @@ import loss_analysis
 
 class Measurement(QWidget):
 
-    def __init__(self, grid, meas_name, default_file, row, column):
+    def __init__(self, grid, meas_name, default_file, row):
         super().__init__()
 
         self.meas_name = meas_name
@@ -18,9 +18,11 @@ class Measurement(QWidget):
         self.start_dir = os.path.join(os.pardir, 'example_cell')
         self.filepath = os.path.join(self.start_dir, default_file)
 
-        self._add_objects(grid, row, column)
+        _, self.file_ext = os.path.splitext(default_file)
 
-    def _add_objects(self, grid,  row, column):
+        self._add_objects(grid, row)
+
+    def _add_objects(self, grid,  row):
         '''
         Builds and binds the boxes.
         '''
@@ -30,16 +32,17 @@ class Measurement(QWidget):
         filename = os.path.basename(self.filepath)
 
         self.label = QLabel(filename, self)
-        grid.addWidget(self.btn, row, column)
-        grid.addWidget(self.label, row, column + 1)
+        grid.addWidget(self.btn, row, 0)
+        grid.addWidget(self.label, row, 1)
 
     def _get(self):
         '''
         Gets and sets the label with the new file name
         '''
+        filter_str = '{0} file (*{1})'.format(self.meas_name, self.file_ext)
         self.filepath = QFileDialog.getOpenFileName(self,
                             'Choose {0} file'.format(self.meas_name),
-                            self.start_dir)[0]
+                            self.start_dir, filter_str)[0]
         filename = os.path.basename(self.filepath)
         self.label.setText(filename)
 
@@ -87,7 +90,7 @@ class LossAnalysisGui(QWidget):
 
         for box, row_num in zip(boxes, range(len(boxes))):
             self.measurement.append(Measurement(grid, box[0], box[1],
-                                              row_num + 3, 0))
+                                              row_num + 3))
 
         # save figures checkbox
         self.cb_save_fig = QCheckBox('Save figures', self)
@@ -138,8 +141,6 @@ class LossAnalysisGui(QWidget):
 
         # pass the file names, and let the next thing handle them.
         la = loss_analysis.Cell(**files)
-        if self.cell_name_input.text()=='':
-            cell_name = None
         la.process_all(self.save_fig_bool, self.output_dir,
                        self.cell_name_input.text())
 
