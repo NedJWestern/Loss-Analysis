@@ -4,10 +4,8 @@ NOTES:
 
 TODO:
 - see in-text TODOs and xxx
+- check file extensions
 - check user input cell_name as valid filename
-- load example files as 'Cell' class method
-- cleanup gui builder
-- add output directory dialog box
 - add pie charts or waterfall plots for loss analysis
 - move some helper functions to another module?
 - change load functions into pure functions returning dictionaries, then use

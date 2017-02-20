@@ -8,16 +8,15 @@ from PyQt5.QtWidgets import (QWidget, QFileDialog, QPushButton, QTextEdit,
 import loss_analysis
 
 
-class LoadButtonCombo(QWidget):
-#TODO: couldn't this whole class just be a single function?
+class Measurement(QWidget):
 
-    def __init__(self, grid, info, default_file, row, column):
+    def __init__(self, grid, meas_name, default_file, row, column):
         super().__init__()
 
-        self.info = info
+        self.meas_name = meas_name
 
-        path = os.path.join(os.pardir, 'example_cell')
-        self.filepath = os.path.join(path, default_file)
+        self.start_dir = os.path.join(os.pardir, 'example_cell')
+        self.filepath = os.path.join(self.start_dir, default_file)
 
         self._add_objects(grid, row, column)
 
@@ -25,7 +24,7 @@ class LoadButtonCombo(QWidget):
         '''
         Builds and binds the boxes.
         '''
-        self.btn = QPushButton('Load {0}'.format(self.info))
+        self.btn = QPushButton('Load {0}'.format(self.meas_name))
         self.btn.clicked.connect(self._get)
 
         filename = os.path.basename(self.filepath)
@@ -38,14 +37,14 @@ class LoadButtonCombo(QWidget):
         '''
         Gets and sets the label with the new file name
         '''
-        default_dir = os.path.dirname(self.filepath)
-        self.filepath = QFileDialog.getOpenFileName(self, 'Choose {0} file'.format(self.info),
-                                                    default_dir)[0]
+        self.filepath = QFileDialog.getOpenFileName(self,
+                            'Choose {0} file'.format(self.meas_name),
+                            self.start_dir)[0]
         filename = os.path.basename(self.filepath)
         self.label.setText(filename)
 
     def file(self):
-        return {self.info + '_fname': self.filepath}
+        return {self.meas_name + '_fname': self.filepath}
 
 
 class LossAnalysisGui(QWidget):
@@ -63,6 +62,20 @@ class LossAnalysisGui(QWidget):
         self.start_dir = os.path.join(os.pardir, 'example_cell')
         self.save_fig_bool = False
 
+        # select starting directory
+        self.btn_start_dir = QPushButton("Select start directory")
+        self.btn_start_dir.clicked.connect(self.select_start_dir)
+        grid.addWidget(self.btn_start_dir, 0, 0)
+        self.label_start_dir = QLabel(os.path.basename(self.start_dir), self)
+        grid.addWidget(self.label_start_dir, 0, 1)
+
+        # select output directory
+        self.btn_output_dir = QPushButton("Select output directory")
+        self.btn_output_dir.clicked.connect(self.select_output_dir)
+        grid.addWidget(self.btn_output_dir, 1, 0)
+        self.label_output_dir = QLabel(os.path.basename(self.output_dir), self)
+        grid.addWidget(self.label_output_dir, 1, 1)
+
         boxes = [['reflectance', 'example_reflectance.csv'],
                  ['EQE', 'example_EQE.txt'],
                  ['light IV', 'example_lightIV.lgt'],
@@ -70,35 +83,21 @@ class LossAnalysisGui(QWidget):
                  ['dark IV', 'example_darkIV.drk']
                  ]
 
-        self.items = []
+        self.measurement = []
 
-        # TODO Ned: I'm not convinced this is the best method
         for box, row_num in zip(boxes, range(len(boxes))):
-            self.items.append(LoadButtonCombo(grid, box[0], box[1],
-                                              row_num + 1, 0))
-
-        # select starting directory
-        self.btn_start_dir = QPushButton("Select start directory")
-        self.btn_start_dir.clicked.connect(self.select_start_dir)
-        grid.addWidget(self.btn_start_dir, 6, 0)
-        self.label_start_dir = QLabel(os.path.basename(self.start_dir), self)
-        grid.addWidget(self.label_start_dir, 6, 1)
-
-        # cell name input
-        self.cell_name_input = QLineEdit(self)
-        grid.addWidget(self.cell_name_input, 7, 1)
-
-        # select output directory
-        self.btn_output_dir = QPushButton("Select output directory")
-        self.btn_output_dir.clicked.connect(self.select_output_dir)
-        grid.addWidget(self.btn_output_dir, 8, 0)
-        self.label_output_dir = QLabel(os.path.basename(self.output_dir), self)
-        grid.addWidget(self.label_output_dir, 8, 1)
+            self.measurement.append(Measurement(grid, box[0], box[1],
+                                              row_num + 3, 0))
 
         # save figures checkbox
         self.cb_save_fig = QCheckBox('Save figures', self)
         self.cb_save_fig.stateChanged.connect(self.save_fig_toggle)
         grid.addWidget(self.cb_save_fig, 9, 0)
+
+        # cell name input
+        self.cell_name_input = QLineEdit(self)
+        self.cell_name_input.setPlaceholderText('cell name')
+        grid.addWidget(self.cell_name_input, 9, 1)
 
         # process all data
         self.btn_process = QPushButton("Process data")
@@ -114,6 +113,11 @@ class LossAnalysisGui(QWidget):
         self.start_dir = QFileDialog.getExistingDirectory(self,
                         'Choose start directory', self.start_dir)
         self.label_start_dir.setText(os.path.basename(self.start_dir))
+        for m in self.measurement:
+            m.start_dir = self.start_dir
+
+        self.output_dir = self.start_dir
+        self.label_output_dir.setText(os.path.basename(self.start_dir))
 
     def select_output_dir(self):
         self.output_dir = QFileDialog.getExistingDirectory(self,
@@ -129,7 +133,7 @@ class LossAnalysisGui(QWidget):
     def process_data(self):
 
         files = {}
-        for i in self.items:
+        for i in self.measurement:
             files.update(i.file())
 
         # pass the file names, and let the next thing handle them.
@@ -145,10 +149,10 @@ if __name__ == '__main__':
     logfile = open('traceback_log.txt', 'w')
     app = QApplication(sys.argv)
     # try:
-    ex = LossAnalysisGui()
+    lag = LossAnalysisGui()
     # except:
     # traceback.print_exc(file=logfile)
 
-    ex.show()
+    lag.show()
     logfile.close()
     sys.exit(app.exec_())
