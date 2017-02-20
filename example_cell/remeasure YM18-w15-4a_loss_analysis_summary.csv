@@ -1,30 +1,30 @@
 
 
             ##### Check inputs,                     
-                      Suns Voc, remeasure YM18-w15-4a
                        Dark IV, Remeasure ym18-w15-4a
+                      Suns Voc, remeasure YM18-w15-4a
                       Light IV, remeasure YM18-w15-4a
-                     Cell Area, 0.000e+00           
+                           Jsc, -6.605e-02          
                            Voc, 4.045e-03           
                 Cell thickness, -5.263e-02          
-                           Jsc, -6.605e-02          
+                     Cell Area, 0.000e+00           
 
 
              ##### Reflectance,                     
                       filename, example_reflectance.csv
                            WAR, 3.535               
                        f_metal, 1.069               
-                             R, 48.932              
                    R_wo_escape, 38.073              
+                             R, 48.932              
 
 
                       ##### QE,                     
                       filename, example_EQE.txt     
+                           Jsc, 0.03652             
                 Chopping Speed,   119.96            
                     Light Bias,   0.0 mA            
-                  Voltage Bias,   0.00              
-                           Jsc, 0.03652             
                  Sync Waveform,   Sine              
+                  Voltage Bias,   0.00              
            Monitor Corrections,   On                
                Basore fit Leff, 5.707e-02           
               Basore fit eta_c, 88.832              
@@ -54,24 +54,24 @@
 
                 ##### Suns Voc,                     
                       filename, example_sunsVoc.xlsm
-                   Jsc (A/cm²), 0.039103            
           Wafer Thickness (cm), 0.018               
                      Base Type, p-type              
-               Number of Cells, 1                   
-     Base Resistivity (Ohm-cm), 2                   
                    Sample Name, remeasure YM18-w15-4a
-        Ideality (n)   @ 1 sun, 1.341345            
+     Base Resistivity (Ohm-cm), 2                   
+               Number of Cells, 1                   
+                   Jsc (A/cm²), 0.039103            
+                           PFF, 0.7503339           
+                       Vmp (V), 0.5339895           
+        Ideality (n) @ 0.1 sun, 2.935565            
+             Pseudo Efficiency, 18.58567            
                    Jo1 (A/cm²), 3.29671e-13         
                  Voc @ 0.1 sun, 0.5265459           
-                       Vmp (V), 0.5339895           
                    Jo2 (A/cm²), 9.484486e-08        
-                           PFF, 0.7503339           
-            Fitted Rsh (W-cm²), 558.8674            
-        Ideality (n) @ 0.1 sun, 2.935565            
-                   Jmp (A/cm²), 0.03480531          
-             Pseudo Efficiency, 18.58567            
-           Apparent Rs (W-cm²), 0.9214187           
                        Voc (V), 0.6334519           
+        Ideality (n)   @ 1 sun, 1.341345            
+            Fitted Rsh (W-cm²), 558.8674            
+                   Jmp (A/cm²), 0.03480531          
+           Apparent Rs (W-cm²), 0.9214187           
 
 
                  ##### Dark IV,                     

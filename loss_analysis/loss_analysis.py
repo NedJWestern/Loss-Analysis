@@ -6,6 +6,7 @@ import os
 import re
 from collections import OrderedDict
 import matplotlib.pyplot as plt
+import warnings
 # modules for this package
 import analysis
 from scipy import constants
@@ -73,9 +74,14 @@ class Refl(object):
         self.filename = os.path.basename(raw_data_file)
 
         data_array = np.genfromtxt(raw_data_file, usecols=(0, 1), skip_header=1,
-                                   delimiter=',')
-        self.wl = data_array[:, 0]
-        self.refl = data_array[:, 1]
+                                   delimiter=',').transpose()
+
+        # is this needed?
+        if data_array[0, 0] > data_array[0, -1]:
+            data_array = data_array[:, ::-1]
+
+        self.wl = data_array[0, :]
+        self.refl = data_array[1, :]
 
 class QE(object):
 
@@ -188,8 +194,9 @@ class IVSuns(object):
     def process(self):
         '''Suns Voc calculations'''
 
-        self.m = 1 / Vth * self.effsuns \
-            / (np.gradient(self.effsuns) / np.gradient(self.V))
+        with np.errstate(divide='ignore', invalid='ignore'):
+            self.m = 1 / Vth * self.effsuns \
+                / (np.gradient(self.effsuns) / np.gradient(self.V))
 
     def plot_IV(self, ax):
         ax.plot(self.V, self.J, '-o', label='suns Voc')
@@ -228,8 +235,11 @@ class IVSuns(object):
             data_array = np.genfromtxt(raw_data_file, usecols=(0, 1, 2, 3, 4),
                                        skip_header=1)
         else:
-            wb = openpyxl.load_workbook(raw_data_file, read_only=True,
-                                        data_only=True)
+            # suppress annoying warning
+            with warnings.catch_warnings():
+                warnings.simplefilter('ignore')
+                wb = openpyxl.load_workbook(raw_data_file, read_only=True,
+                                            data_only=True)
             ws_RawData = wb.get_sheet_by_name('RawData')
             ws_User = wb.get_sheet_by_name('User')
 
@@ -237,20 +247,18 @@ class IVSuns(object):
             data_array = np.array([[i.value for i in j] for j in
                                    ws_RawData['E2':last_cell]])
 
-            # TODO: I know this list() is shite, temporary workaround for my old
-            # openpyxl install
             # try: ??
             # np.asarray(xlSheet.Range("A9:I133").Value, dtype=np.float64)
 
-            params = [i.value for i in list(ws_User['A5':'F5'])[0]]
-            vals = [i.value for i in list(ws_User['A6':'F6'])[0]]
+            params = [i.value for i in ws_User['A5':'F5'][0]]
+            vals = [i.value for i in ws_User['A6':'F6'][0]]
             self.params = dict(zip(params, vals))
 
-            params = [i.value for i in list(ws_User['A8':'L8'])[0]]
+            params = [i.value for i in ws_User['A8':'L8'][0]]
             # Reduce 13 significant figures in .xlsx file to 6 (default of .format())
             # vals = [float('{:f}'.format(i.value)) for i in ws_User['A6':'F6'][0]]
             vals = [float('{:e}'.format(i.value))
-                    for i in list(ws_User['A9':'L9'])[0]]
+                    for i in ws_User['A9':'L9'][0]]
             self.output = dict(zip(params, vals))
 
         self.effsuns = data_array[:, 0]     # Effective Suns

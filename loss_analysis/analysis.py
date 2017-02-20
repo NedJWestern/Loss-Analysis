@@ -4,85 +4,13 @@ from scipy.optimize import curve_fit
 import os
 from numpy.polynomial import polynomial as poly
 
-# helper functions ###########################################################
-
-# def fit_long_wavelengths(self, wavelength, IQE, theta=0, model='Basore',
-#                         **kwargs):
-#     '''
-#     Fits to the long wavelengths to determine
-#     the bulk diffusion length and the rear surface recombination
-#     '''
-#     try:
-#         vals = getattr(
-#             self, 'fit_' + model)(wavelength, IQE, theta=0, **kwargs)
-#     except:
-#         print ('Incorrect or model failed ')
-#
-#     #TODO: load into attributes instead of returning?
-#     return vals
-
-# def Isenberg_function(self, alpha, L, S, emitter_width=5e-5):
-#     '''Used in 'fit_Isenberg' function'''
-#     # TODO: check these calcs
-#     D = 27.  # [cm^2/s] diffusion constant
-#     W = self.thickness - emitter_width
-#
-#     SigmaW = (S * L / D * np.cosh(W / L) + np.sinh(W / L)) / \
-#         (S * L / D * np.sinh(W / L) + np.cosh(W / L))
-#
-#     f0 = L ** 2. / D * alpha / (1. - (L * alpha)**2.)
-#     fd0 = -alpha * f0
-#     fW = f0 * np.exp(-alpha * W)
-#     fdW = -alpha * fW
-#
-#     IQE = D / L * (SigmaW * f0 + L * fd0) - D * (S * fW / D + fdW) / (
-#         S * L / D * np.sinh(W / L) + np.cosh(W / L))
-#
-#     if S < 0 or L < 0 or emitter_width < 0:
-#         IQE *= 4    # TODO: what's this for??
-#
-#     return IQE * np.exp(-emitter_width * alpha)
-
-# def fit_Isenberg(self, wavelength, IQE, theta=0, wlbounds=[700, 940]):
-#     '''
-#     TODO: not finished
-#
-#     Performs the fit using the Isenberg_function. This is considered an
-#     improvement of the Basore method.
-#     doi:10.1109/PVSC.2002.1190525
-#
-#     Returns:
-#         a dictionary containing
-#             L: the diffusion length (cm)
-#             Srear: and the rear surface
-#                    recombination velocity (cm/s)
-#             WJ: width of the junction
-#     '''
-#
-#     fit_params = ['L', 'Srear', 'Wj']
-#
-#     index = wavelength > wlbounds[0]
-#     index *= wavelength < wlbounds[1]
-#
-#     IQE = IQE[index]
-#     wavelength = wavelength[index]
-#
-#     alpha = self.wl_to_alpha(wavelength) / np.cos(np.radians(theta))
-#
-#     p0 = (.09, 10000, 7e-06)
-#     popt, pcov = curve_fit( self.Isenberg_function, alpha, IQE, p0=p0,
-#                            method='trf', bounds=(0, [100, 1e6, 0.02]))
-#
-#     #TODO: load into attributes instead of returning?
-#     return {elem:popt[i] for i, elem in enumerate(fit_params)}
-
-path = os.sep.join(os.path.dirname(os.path.realpath(__file__)).split(os.sep)[:-1])
+path_const = os.path.join(os.pardir, 'constants')
 
 def AM15G_resample(wl):
     '''Returns AM1.5G spectrum at given wavelengths'''
-    AM15G_wl = np.genfromtxt(os.path.join(path,'constants', 'AM1.5G_spectrum.dat'),
+    AM15G_wl = np.genfromtxt(os.path.join(path_const, 'AM1.5G_spectrum.dat'),
                              usecols=(0,), skip_header=1)
-    AM15G_Jph = np.genfromtxt(os.path.join(path,'constants', 'AM1.5G_spectrum.dat'),
+    AM15G_Jph = np.genfromtxt(os.path.join(path_const, 'AM1.5G_spectrum.dat'),
                               usecols=(1,), skip_header=1)
     return np.interp(wl, AM15G_wl, AM15G_Jph)
 
@@ -100,7 +28,7 @@ def find_nearest(x_val, xdata, ydata=None):
 
 def wl_to_alpha(given_wl):
     '''Returns alpha for a given wavelength in [nm] xxx? in Si'''
-    alpha_data = np.genfromtxt(os.path.join(path,'constants', 'Si_alpha_Green_2008.dat'),
+    alpha_data = np.genfromtxt(os.path.join(path_const, 'Si_alpha_Green_2008.dat'),
                                usecols=(0,1), skip_header=1).transpose()
     wl = alpha_data[0]
     alpha = alpha_data[1]
@@ -130,7 +58,6 @@ def fit_Basore(wavelength, IQE, theta=0, wlbounds=(1040, 1100)):
     # print(1/wavelength)
 
     fit_params = ['Leff']
-    # TODO: is this not already a float?
     alpha = wl_to_alpha(wavelength) / float(np.cos(np.radians(theta)))
     coefs = poly.polyfit(1. / alpha, 1. / IQE, 1)
 

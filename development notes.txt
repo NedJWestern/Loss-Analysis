@@ -3,8 +3,7 @@ NOTES:
   currently downsampling to the lowest possible resolution (?)
 
 TODO:
-- see in-text TODOs and xxx
-- fix openpyxl install
+- see in-text TODOs
 - write tests, at least for functions in analysis.py
 - add pie charts or waterfall plots for loss analysis
 - arbitrary input params, to plot against separately? (perhaps too much work)
