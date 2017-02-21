@@ -6,6 +6,7 @@ from numpy.polynomial import polynomial as poly
 
 path_const = os.path.join(os.pardir, 'constants')
 
+
 def AM15G_resample(wl):
     '''Returns AM1.5G spectrum at given wavelengths'''
     AM15G_wl = np.genfromtxt(os.path.join(path_const, 'AM1.5G_spectrum.dat'),
@@ -92,7 +93,7 @@ def Rs_calc_2(Voc, Jsc, FF, pFF):
     '''
     return Voc / Jsc * (1 - FF / pFF)
 
-def FF_ideal(Voc, Jsc = None, Rs = None, Rsh = None, T=300):
+def FF_ideal(Voc, Jsc = None, Rs = None, Rsh = None, T = 300):
     '''
     Calculates the ideal Fill Factor of a solar cell.
     Gives option to account for series and shunt resistance.
@@ -129,4 +130,17 @@ def FF_ideal(Voc, Jsc = None, Rs = None, Rsh = None, T=300):
     else:
         FF = None
 
-    return (FFo, FFs, FF)
+    return FFo, FFs, FF
+
+def FF_loss(Voc, Jsc, Vmp, Jmp, FFm, Rs, Rsh):
+    '''
+    Calculates the loss in fill factor from shunt and series resistance
+    TODO: check theory
+    '''
+    FFo, _, _ = FF_ideal(Voc)
+
+    FF_Rs = Jmp**2 * Rs / (Voc * Jsc)
+    FF_Rsh = (Vmp + Rs * Jmp) / (Voc * Jsc * Rsh)
+    FF_other = FFo - FFm - FF_Rs - FF_Rsh
+
+    return FF_Rs, FF_Rsh, FF_other

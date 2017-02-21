@@ -15,6 +15,17 @@ T = 300   # TODO: make optional input?
 Vth = constants.k * T / constants.e
 
 
+def waterfall(ax, y, xlabels=None):
+    y = np.array(y)
+    x = np.arange(len(y))
+    y_bot = np.append(0, y[:-1].cumsum())
+    ax.bar(x, y, bottom=y_bot, align='center')
+    if xlabels is not None:
+        ax.set_xticks(np.arange(len(xlabels)))
+        ax.set_xticklabels(xlabels)
+
+    return ax
+
 class Refl(object):
 
     def __init__(self, fname):
@@ -151,6 +162,19 @@ class IVLight(object):
         self.FF_vals['FFs'] = FFs
         self.FF_vals['FF'] = FF
 
+        FF_Rs, FF_Rsh, FF_other = analysis.FF_loss(self.output['Voc'],
+                                                   self.output['Jsc'],
+                                                   self.output['Vmp'],
+                                                   self.output['Jmp'],
+                                                   self.output['FF'],
+                                                   Rs, Rsh)
+
+        self.FF_loss = OrderedDict()
+        # xxx append instead?
+        self.FF_loss['FF_Rs'] = FF_Rs
+        self.FF_loss['FF_Rsh'] = FF_Rsh
+        self.FF_loss['FF_other'] = FF_other
+
     def plot(self, ax):
         ax.plot(self.V, self.J, '-o', label='light IV')
         ax.set_xlabel('Voltage [$V$]')
@@ -158,8 +182,11 @@ class IVLight(object):
         ax.grid(True)
         # ax.legend(loc='best')
 
+    def plot_FF1(self, ax):
+        waterfall(ax, list(self.FF_loss.values()), list(self.FF_loss.keys()))
+
     def load(self, raw_data_file):
-        '''Loads Light IV data in attributes'''
+        '''Loads Light IV data into attributes'''
         self.filepath = raw_data_file
         self.filename = os.path.basename(raw_data_file)
 
@@ -175,7 +202,6 @@ class IVLight(object):
                 key = key_temp.strip()
                 d[key] = float(val)
             else:
-                # d.update(dict(re.findall(r'([\s\S]+)\s*:\t([^\n]+)', line)))
                 d.update(dict([line.strip('\n').split(':\t')]))
 
         data_array = np.genfromtxt(raw_data_file, skip_header=20)
@@ -463,24 +489,25 @@ class Cell(object):
 
         fig_QE = plt.figure('QE', figsize=(30 / 2.54, 15 / 2.54))
         fig_QE.clf()
-        # for light and dark IV
-        fig_IV = plt.figure('IV', figsize=(30 / 2.54, 15 / 2.54))
-        fig_IV.clf()
 
         ax_refl = fig_QE.add_subplot(2, 2, 1)
         ax_QE = fig_QE.add_subplot(2, 2, 2)
         ax_QE_fit = fig_QE.add_subplot(2, 2, 3)
         ax_QE_layered = fig_QE.add_subplot(2, 2, 4)
 
-        ax_darkIV = fig_IV.add_subplot(2, 2, 1)
-        ax_ideality = fig_IV.add_subplot(2, 2, 3)
-        ax_lightIV = fig_IV.add_subplot(2, 2, 2)
-        ax_tau = fig_IV.add_subplot(2, 2, 4)
-
         self.refl.plot(ax_refl)
         self.refl.plot(ax_QE)
         self.qe.plot_EQE(ax_QE)
         self.qe.plot_IQE(ax_QE)
+
+        # for light and dark IV
+        fig_IV = plt.figure('IV', figsize=(30 / 2.54, 15 / 2.54))
+        fig_IV.clf()
+
+        ax_darkIV = fig_IV.add_subplot(2, 2, 1)
+        ax_ideality = fig_IV.add_subplot(2, 2, 3)
+        ax_lightIV = fig_IV.add_subplot(2, 2, 2)
+        ax_tau = fig_IV.add_subplot(2, 2, 4)
 
         self.sunsVoc.plot_m(ax_ideality)
         self.sunsVoc.plot_IV(ax_lightIV)
@@ -505,6 +532,14 @@ class Cell(object):
         # line_EQE, = self.qe.plot_EQE(ax_QE_layered)
         # line_EQE.set_marker('x')
         # self.refl.plot_QE(ax_QE_layered)
+
+        # for fill factor loss
+        fig_FF = plt.figure('FF', figsize=(30 / 2.54, 15 / 2.54))
+        fig_FF.clf()
+
+        ax_FF1 = fig_FF.add_subplot(2, 2, 1)
+
+        self.liv.plot_FF1(ax_FF1)
 
         fig_QE.set_tight_layout(True)
         fig_IV.set_tight_layout(True)
