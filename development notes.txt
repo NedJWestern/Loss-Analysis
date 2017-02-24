@@ -4,6 +4,7 @@ NOTES:
 
 TODO:
 - see in-text TODOs
+- name for EQE_xxx_unnamed
 - write tests, at least for functions in analysis.py
 - add pie charts or waterfall plots for loss analysis
 - arbitrary input params, to plot against separately? (perhaps too much work)

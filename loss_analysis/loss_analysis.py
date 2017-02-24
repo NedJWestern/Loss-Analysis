@@ -99,7 +99,7 @@ class QE(object):
     def __init__(self, fname):
         self.load(fname)
 
-    def process(self, refl):
+    def process(self, wl, refl, refl_wo_escape):
         '''
         Performs several calculations from QE and Reflectance data including:
         - IQE
@@ -110,6 +110,12 @@ class QE(object):
 
         self.output_Basore_fit, self.plot_Basore_fit = analysis.fit_Basore(
             self.wl, self.IQE)
+
+        EQE_on_eta_c = self.EQE / self.output_Basore_fit['eta_c'] * 100
+        idx = analysis.find_nearest(750, wl)
+        total_min = np.minimum((100 - refl_wo_escape), EQE_on_eta_c)
+        self.EQE_xxx_unnamed = np.append(100 - refl_wo_escape[:idx],
+                                         total_min[idx:])
 
     def plot_EQE(self, ax):
 
@@ -525,10 +531,13 @@ class Cell(object):
         ax_QE_layered.fill_between(self.refl.wl,
                                    100 - dummy_ones * self.refl.f_metal,
                                    100 - self.refl.refl_wo_escape, color='green')
+        ax_QE_layered.fill_between(self.refl.wl, 100 - self.refl.refl_wo_escape,
+                                   100 - self.refl.refl, color='red')
         ax_QE_layered.fill_between(self.refl.wl, 100 - self.refl.refl,
-                                   100 - self.refl.refl_wo_escape, color='red')
-        ax_QE_layered.fill_between(self.refl.wl, 100 - self.refl.refl,
-                                   self.qe.EQE, color='cyan')
+                                   self.qe.EQE_xxx_unnamed, color='cyan')
+        # ax_QE_layered.plot(self.refl.wl, self.qe.EQE_xxx_unnamed)
+        ax_QE_layered.fill_between(self.refl.wl, self.qe.EQE_xxx_unnamed,
+                                   self.qe.EQE, color='magenta')
         # line_EQE, = self.qe.plot_EQE(ax_QE_layered)
         # line_EQE.set_marker('x')
         # self.refl.plot_QE(ax_QE_layered)
@@ -564,7 +573,7 @@ class Cell(object):
 
         self.sunsVoc.process()
         self.refl.process()
-        self.qe.process(self.refl.refl)
+        self.qe.process(self.refl.wl, self.refl.refl, self.refl.refl_wo_escape)
         self.Rsh = self.div.process()
 
         self.Rs_1 = analysis.Rs_calc_1(self.liv.output['Vmp'],
