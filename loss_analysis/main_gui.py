@@ -3,7 +3,7 @@ import traceback
 import os
 from PyQt5.QtWidgets import (QWidget, QFileDialog, QPushButton, QTextEdit,
                              QGridLayout, QApplication, QLabel, QComboBox,
-                             QCheckBox, QLineEdit)
+                             QCheckBox, QLineEdit, QStatusBar, QMainWindow)
 # files for this package
 import loss_analysis
 
@@ -41,8 +41,9 @@ class Measurement(QWidget):
         '''
         filter_str = '{0} file (*{1})'.format(self.meas_name, self.file_ext)
         self.filepath = QFileDialog.getOpenFileName(self,
-                            'Choose {0} file'.format(self.meas_name),
-                            self.start_dir, filter_str)[0]
+                                                    'Choose {0} file'.format(
+                                                        self.meas_name),
+                                                    self.start_dir, filter_str)[0]
         filename = os.path.basename(self.filepath)
         self.label.setText(filename)
 
@@ -52,8 +53,10 @@ class Measurement(QWidget):
 
 class LossAnalysisGui(QWidget):
 
-    def __init__(self):
+    def __init__(self, parent):
+        # super(LossAnalysisGui, self).__init__(parent)
         super().__init__()
+        self.parent = parent
 
         self.initUI()
 
@@ -90,7 +93,7 @@ class LossAnalysisGui(QWidget):
 
         for box, row_num in zip(boxes, range(len(boxes))):
             self.measurement.append(Measurement(grid, box[0], box[1],
-                                              row_num + 3))
+                                                row_num + 3))
 
         # save figures checkbox
         self.cb_save_fig = QCheckBox('Save figures', self)
@@ -107,14 +110,16 @@ class LossAnalysisGui(QWidget):
         self.btn_process.clicked.connect(self.process_data)
         grid.addWidget(self.btn_process, 10, 0)
 
+        # self.statusBar = QStatusBar()
+        # self.setStatusBar(self.statusBar)
+
         self.setLayout(grid)
-        self.setGeometry(100, 100, 400, 500)
-        self.setWindowTitle('Loss analysis')
+
         self.show()
 
     def select_start_dir(self):
         self.start_dir = QFileDialog.getExistingDirectory(self,
-                        'Choose start directory', self.start_dir)
+                                                          'Choose start directory', self.start_dir)
         self.label_start_dir.setText(os.path.basename(self.start_dir))
         for m in self.measurement:
             m.start_dir = self.start_dir
@@ -124,7 +129,7 @@ class LossAnalysisGui(QWidget):
 
     def select_output_dir(self):
         self.output_dir = QFileDialog.getExistingDirectory(self,
-                        'Choose output directory', self.output_dir)
+                                                           'Choose output directory', self.output_dir)
         self.label_output_dir.setText(os.path.basename(self.output_dir))
 
     def save_fig_toggle(self, state):
@@ -140,9 +145,38 @@ class LossAnalysisGui(QWidget):
             files.update(i.file())
 
         # pass the file names, and let the next thing handle them.
+        self.parent.statusBar().showMessage('loading files')
         la = loss_analysis.Cell(**files)
-        la.process_all(self.save_fig_bool, self.output_dir,
-                       self.cell_name_input.text())
+        if la.err is None:
+            self.parent.statusBar().showMessage('Calculating losses')
+            la.process_all(self.save_fig_bool, self.output_dir,
+                           self.cell_name_input.text())
+            self.parent.statusBar().showMessage('Done!')
+        else:
+            self.parent.statusBar().showMessage('Error:' + str(la.err[1]))
+
+
+class App(QMainWindow):
+
+    def __init__(self):
+        super().__init__()
+        self.title = 'Loss analysis'
+        self.left = 100
+        self.top = 100
+        self.width = 400
+        self.height = 500
+        self.initUI()
+
+    def initUI(self):
+
+        self.setWindowTitle(self.title)
+        self.setGeometry(self.left, self.top, self.width, self.height)
+        self.statusBar().showMessage('All clear, ready to roll')
+
+        self.form_widget = LossAnalysisGui(self)
+        self.setCentralWidget(self.form_widget)
+
+        self.show()
 
 
 if __name__ == '__main__':
@@ -150,7 +184,7 @@ if __name__ == '__main__':
     logfile = open('traceback_log.txt', 'w')
     app = QApplication(sys.argv)
     # try:
-    lag = LossAnalysisGui()
+    lag = App()
     # except:
     # traceback.print_exc(file=logfile)
 

@@ -2,6 +2,7 @@
 
 import openpyxl
 import numpy as np
+import sys
 import os
 import re
 from collections import OrderedDict
@@ -25,6 +26,7 @@ def waterfall(ax, y, xlabels=None):
         ax.set_xticklabels(xlabels)
 
     return ax
+
 
 class Refl(object):
 
@@ -94,6 +96,7 @@ class Refl(object):
         self.wl = data_array[0, :]
         self.refl = data_array[1, :]
 
+
 class QE(object):
 
     def __init__(self, fname):
@@ -146,13 +149,39 @@ class QE(object):
         d['Jsc'] = round(float(d['Jsc']) / 1e3, 7)
         self.output = d
 
+
 class IVLight(object):
 
     def __init__(self, fname):
         self.load(fname)
 
     def process(self, Rsh, Rs):
-        '''Light IV calculations'''
+        '''
+        Light IV calculations
+
+        caculates the idea fill factors:
+
+        FF0
+        FFs
+        FF
+
+        The the loss from the current
+        FF_Rsh
+        FF_Rsh
+        FF_other
+
+        These are all stored within two dictionaries.
+
+        Inputs:
+            Rsh: The shunt resistance
+            Rs: The series resistance
+
+        Outputs:
+            None
+        '''
+
+        self.m = analysis.ideality_factor(
+            self.V, -1 * (self.J - self.output['Jsc']), Vth)
 
         FFo, FFs, FF = analysis.FF_ideal(self.output['Voc'],
                                          Jsc=self.output['Jsc'], Rs=Rs, Rsh=Rsh)
@@ -170,17 +199,32 @@ class IVLight(object):
                                                    Rs, Rsh)
 
         self.FF_loss = OrderedDict()
-        # xxx append instead?
+
         self.FF_loss['FF_Rs'] = FF_Rs
         self.FF_loss['FF_Rsh'] = FF_Rsh
         self.FF_loss['FF_other'] = FF_other
 
     def plot(self, ax):
+        '''
+        Plots the current voltage curve
+
+        inputs:
+            ax: A figure axes to which is plotted
+        '''
         ax.plot(self.V, self.J, '-o', label='light IV')
         ax.set_xlabel('Voltage [$V$]')
         ax.set_ylabel('Current Density [$A cm^{-2}$]')
         ax.grid(True)
         # ax.legend(loc='best')
+
+    def plot_m(self, ax):
+        # trims some noise at ends of array
+        ax.plot(self.V[10:-5], self.m[10:-5], '-o', label='Light IV')
+        ax.set_xlabel('Voltage [$V$]')
+        ax.set_ylabel('Ideality Factor []')
+        ax.grid(True)
+        ax.legend(loc='best')
+        ax.set_ylim(ymin=0)
 
     def plot_FF1(self, ax):
         waterfall(ax, list(self.FF_loss.values()), list(self.FF_loss.keys()))
@@ -210,6 +254,7 @@ class IVLight(object):
 
         self.output = d
 
+
 class IVSuns(object):
     filepath = None
     filename = None
@@ -220,9 +265,7 @@ class IVSuns(object):
     def process(self):
         '''Suns Voc calculations'''
 
-        with np.errstate(divide='ignore', invalid='ignore'):
-            self.m = 1 / Vth * self.effsuns \
-                / (np.gradient(self.effsuns) / np.gradient(self.V))
+        self.m = analysis.ideality_factor(self.V, self.effsuns, Vth)
 
     def plot_IV(self, ax):
         ax.plot(self.V, self.J, '-o', label='suns Voc')
@@ -250,6 +293,22 @@ class IVSuns(object):
         ax.grid(True)
         ax.legend(loc='best')
         ax.set_ylim(ymin=0)
+
+    def plot_log_IV(self, ax):
+        # trims some noise at ends of array
+        # TODO: Link this to Jsc rather than this manual index
+
+        # check for real values
+        index = np.isfinite(self.J)
+        # find the meaured Jsc
+        Jsc_index = abs(self.V[index]) == np.min(abs(self.V[index]))
+
+        ax.plot(self.V, -1 * (
+            self.J - self.J[index][Jsc_index]), '-o', label='Suns Voc')
+        ax.set_xlabel('Voltage [$V$]')
+        ax.set_ylabel('Ideality Factor []')
+        ax.grid(True)
+        ax.legend(loc='best')
 
     def load(self, raw_data_file, text_format=False):
         '''Loads Suns Voc data in attributes'''
@@ -282,7 +341,8 @@ class IVSuns(object):
 
             params = [i.value for i in ws_User['A8':'L8'][0]]
             # Reduce 13 significant figures in .xlsx file to 6 (default of .format())
-            # vals = [float('{:f}'.format(i.value)) for i in ws_User['A6':'F6'][0]]
+            # vals = [float('{:f}'.format(i.value)) for i in
+            # ws_User['A6':'F6'][0]]
             vals = [float('{:e}'.format(i.value))
                     for i in ws_User['A9':'L9'][0]]
             self.output = dict(zip(params, vals))
@@ -294,17 +354,24 @@ class IVSuns(object):
         self.Dn = data_array[:, 4]
         self.tau_eff = data_array[:, 5]
 
+
 class IVDark(object):
 
     def __init__(self, fname):
         self.load(fname)
 
     def process(self):
-        '''Dark IV calculations'''
+        '''
+        This performs the Dark IV calculations for loss analysis
+
+        It currently caculates:
+
+        the idealify factor as a function of voltage
+
+        '''
 
         # Ideality factor
-        with np.errstate(divide='ignore', invalid='ignore'):
-            self.m = 1 / Vth * self.J / (np.gradient(self.J) / np.gradient(self.V))
+        self.m = analysis.ideality_factor(self.V, self.J, Vth)
 
         # Shunt resistance, at 30mV
         # TODO: do linear fit with zero intercept?
@@ -312,12 +379,12 @@ class IVDark(object):
 
         return Rsh
 
-    def plot_IV(self, ax):
-        ax.semilogy(self.V, self.J, '-o', label='data')
+    def plot_log_IV(self, ax):
+        ax.semilogy(self.V, self.J, '-o', label='Dark IV')
         ax.set_xlabel('Voltage [$V$]')
         ax.set_ylabel('Current Density [$A cm^{-2}$]')
         ax.grid(True)
-        # ax.legend(loc='best')
+        ax.legend(loc='best')
 
     def plot_m(self, ax):
         ax.plot(self.V, self.m, '-o', label='dark IV')
@@ -356,9 +423,11 @@ class IVDark(object):
         self.V = data_array[:, 0]
         self.J = data_array[:, 1] / d['Cell Area in sqr cm']
 
-class Cell(object):
 
-    def __init__(self, thickness=0.019, **kwargs):
+class Cell(object):
+    err = None
+
+    def __init__(self, thickness=None, **kwargs):
         self.thickness = thickness  # [cm]
         self.sample_names = {}
         self.input_errors = {}
@@ -367,9 +436,10 @@ class Cell(object):
         self.sunsVoc = IVSuns(kwargs['suns Voc_fname'])
         self.div = IVDark(kwargs['dark IV_fname'])
         self.liv = IVLight(kwargs['light IV_fname'])
-        self.check_input_vals()
 
         self.example_dir = os.path.join(os.pardir, 'example_cell')
+
+        self.check_input_vals()
 
     def check_input_vals(self):
         '''
@@ -384,28 +454,44 @@ class Cell(object):
 
         # Cell area
         # tolerance = 1e-3
-        liv = self.liv.output['Cell Area (sqr cm)']
-        div = self.div.output['Cell Area in sqr cm']
-        delta = (div - liv) / liv
+        area_liv = self.liv.output['Cell Area (sqr cm)']
+        area_div = self.div.output['Cell Area in sqr cm']
+        delta = (area_div - area_liv) / area_liv
         self.input_errors['Cell Area'] = delta
 
         # thickness
-        user_input_t = self.thickness
-        sunsVoc_t = self.sunsVoc.params['Wafer Thickness (cm)']
-        delta = (sunsVoc_t - user_input_t) / user_input_t
+        self.thickness = self.sunsVoc.params['Wafer Thickness (cm)']
+        tck_user_input = self.thickness
+        tck_sunsVoc = self.sunsVoc.params['Wafer Thickness (cm)']
+        delta = (tck_sunsVoc - tck_user_input) / tck_user_input
         self.input_errors['Cell thickness'] = delta
 
         # Voc
-        liv = self.liv.output['Voc']
-        div = self.sunsVoc.output['Voc (V)']
-        delta = (div - liv) / liv
+        Voc_liv = self.liv.output['Voc']
+        Voc_div = self.sunsVoc.output['Voc (V)']
+        delta = (Voc_div - Voc_liv) / Voc_liv
         self.input_errors['Voc'] = delta
 
         # Jsc
-        liv = self.liv.output['Jsc']
-        iqe = self.qe.output['Jsc']
-        delta = (iqe - liv) / liv
+        Jsc_liv = self.liv.output['Jsc']
+        Jsc_iqe = self.qe.output['Jsc']
+        delta = (Jsc_iqe - Jsc_liv) / Jsc_liv
         self.input_errors['Jsc'] = delta
+
+        self.err = None
+        try:
+            # check there is not conflict between the data sets
+            assert abs(self.input_errors['Cell Area']
+                       ) < 0.01, "Provided sample area's disagrees: {0:.1f} cm^2 {1:.1f} cm^2".format(area_liv, area_div)
+            assert abs(self.input_errors['Cell thickness']
+                       ) < 0.01, "Provided sample thickness disagrees: {0:.4f} cm {1:.4f} cm".format(tck_user_input, tck_sunsVoc)
+            assert abs(self.input_errors['Voc']
+                       ) < 0.01, "Provided Voc disagree: {0:.0f} mV {1:.0f} mV".format(Voc_liv * 1000, Voc_div * 1000)
+            assert abs(self.input_errors['Jsc']
+                       ) < 0.1, "Provided Jsc disagree: {0:.0f} mA {1:.0f} mA".format(Jsc_liv * 1000, Jsc_iqe * 1000)
+        except:
+
+            self.err = sys.exc_info()
 
     def collect_outputs(self):
         '''Collects input and output parameters into self.output_list'''
@@ -416,12 +502,12 @@ class Cell(object):
             output_list.append('{:>30}, {:<20}'.format(key, val))
 
         output_list.append('\n')
-        quick_print('##### Check inputs', '',)
+        quick_print('##### Inputs check: Percentage difference', '',)
 
         for key, val in self.sample_names.items():
-            quick_print(key, '{:s}'.format(val))
+            quick_print(key, '{:s}%'.format(val * 100))
         for key, val in self.input_errors.items():
-            quick_print(key, '{:.3e}'.format(val))
+            quick_print(key, '{:.3e}%'.format(val * 100))
 
         output_list.append('\n')
         quick_print('##### Reflectance', '')
@@ -504,21 +590,30 @@ class Cell(object):
         fig_IV = plt.figure('IV', figsize=(30 / 2.54, 15 / 2.54))
         fig_IV.clf()
 
-        ax_darkIV = fig_IV.add_subplot(2, 2, 1)
+        # get the plotting axes
+        ax_logIV = fig_IV.add_subplot(2, 2, 1)
         ax_ideality = fig_IV.add_subplot(2, 2, 3)
         ax_lightIV = fig_IV.add_subplot(2, 2, 2)
         ax_tau = fig_IV.add_subplot(2, 2, 4)
 
+        # plot light IV first, as is typically the noisest
+        self.liv.plot_m(ax_ideality)
+        self.liv.plot(ax_lightIV)
+
+        # plot suns Voc
         self.sunsVoc.plot_m(ax_ideality)
         self.sunsVoc.plot_IV(ax_lightIV)
         self.sunsVoc.plot_tau(ax_tau)
-        self.liv.plot(ax_lightIV)
+        self.sunsVoc.plot_log_IV(ax_logIV)
 
-        self.div.plot_IV(ax_darkIV)
+        # plot dark IV as least noisest
+        self.div.plot_log_IV(ax_logIV)
         self.div.plot_m(ax_ideality)
 
+        # plot the EQE fitted data
         self.qe.plot_Basore_fit(ax_QE_fit)
 
+        # this is doing some loss analysis filling
         dummy_ones = np.ones(len(self.refl.wl))
         ax_QE_layered.fill_between(self.refl.wl, dummy_ones * 100,
                                    100 - dummy_ones * self.refl.f_metal,  color='blue')
@@ -529,6 +624,7 @@ class Cell(object):
                                    100 - self.refl.refl_wo_escape, color='red')
         ax_QE_layered.fill_between(self.refl.wl, 100 - self.refl.refl,
                                    self.qe.EQE, color='cyan')
+
         # line_EQE, = self.qe.plot_EQE(ax_QE_layered)
         # line_EQE.set_marker('x')
         # self.refl.plot_QE(ax_QE_layered)
@@ -545,6 +641,7 @@ class Cell(object):
         fig_IV.set_tight_layout(True)
 
         if save_fig_bool:
+
             fig_QE.savefig(os.path.join(self.output_dir,
                                         self.cell_name + '_QE.png'))
             fig_IV.savefig(os.path.join(self.output_dir,
@@ -553,9 +650,11 @@ class Cell(object):
         plt.show()
 
     def process_all(self, save_fig_bool, output_dir, cell_name):
-        '''Call all calculations'''
+        '''
+        A function that calls all the processing functions.
+        '''
 
-        if cell_name=='':
+        if cell_name == '':
             self.cell_name = self.liv.output['Cell Name ']
         else:
             self.cell_name = cell_name
@@ -568,20 +667,19 @@ class Cell(object):
         self.Rsh = self.div.process()
 
         self.Rs_1 = analysis.Rs_calc_1(self.liv.output['Vmp'],
-                                            self.liv.output['Jmp'],
-                                            self.sunsVoc.V, self.sunsVoc.J)
+                                       self.liv.output['Jmp'],
+                                       self.sunsVoc.V, self.sunsVoc.J)
 
         self.Rs_2 = analysis.Rs_calc_2(self.liv.output['Voc'],
-                                            self.liv.output['Jsc'],
-                                            self.liv.output['FF'],
-                                            self.sunsVoc.output['PFF'])
+                                       self.liv.output['Jsc'],
+                                       self.liv.output['FF'],
+                                       self.sunsVoc.output['PFF'])
 
         self.liv.process(self.Rsh, self.Rs_1)
 
         self.collect_outputs()
         self.print_output_to_file()
         self.plot_all(save_fig_bool)
-
 
 
 if __name__ == "__main__":
@@ -592,7 +690,7 @@ if __name__ == "__main__":
         'EQE_fname': os.path.join(example_dir, 'example_EQE.txt'),
         'light IV_fname': os.path.join(example_dir, 'example_lightIV.lgt'),
         'suns Voc_fname': os.path.join(example_dir, 'example_sunsVoc.xlsm'),
-        'dark IV_fname': os.path.join(example_dir, 'example_darkIV.drk') }
+        'dark IV_fname': os.path.join(example_dir, 'example_darkIV.drk')}
 
     cell1 = Cell(**files)
     cell1.process_all()
