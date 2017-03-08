@@ -146,14 +146,19 @@ class LossAnalysisGui(QWidget):
 
         # pass the file names, and let the next thing handle them.
         self.parent.statusBar().showMessage('loading files')
-        la = loss_analysis.Cell(**files)
-        if la.err is None:
-            self.parent.statusBar().showMessage('Calculating losses')
-            la.process_all(self.save_fig_bool, self.output_dir,
-                           self.cell_name_input.text())
-            self.parent.statusBar().showMessage('Done!')
+
+        # a check on the data
+        # if the data is bad, a message is returned in the gui
+        try:
+            la = loss_analysis.Cell(**files)
+        except Exception as e:
+            self.parent.statusBar().showMessage('Error:' + str(e))
         else:
-            self.parent.statusBar().showMessage('Error:' + str(la.err[1]))
+            self.parent.statusBar().showMessage('Calculating losses')
+
+        la.process_all(self.save_fig_bool, self.output_dir,
+                       self.cell_name_input.text())
+        self.parent.statusBar().showMessage('Done!')
 
 
 class App(QMainWindow):

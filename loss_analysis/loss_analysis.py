@@ -425,7 +425,6 @@ class IVDark(object):
 
 
 class Cell(object):
-    err = None
 
     def __init__(self, thickness=None, **kwargs):
         self.thickness = thickness  # [cm]
@@ -478,20 +477,15 @@ class Cell(object):
         delta = (Jsc_iqe - Jsc_liv) / Jsc_liv
         self.input_errors['Jsc'] = delta
 
-        self.err = None
-        try:
-            # check there is not conflict between the data sets
-            assert abs(self.input_errors['Cell Area']
-                       ) < 0.01, "Provided sample area's disagrees: {0:.1f} cm^2 {1:.1f} cm^2".format(area_liv, area_div)
-            assert abs(self.input_errors['Cell thickness']
-                       ) < 0.01, "Provided sample thickness disagrees: {0:.4f} cm {1:.4f} cm".format(tck_user_input, tck_sunsVoc)
-            assert abs(self.input_errors['Voc']
-                       ) < 0.01, "Provided Voc disagree: {0:.0f} mV {1:.0f} mV".format(Voc_liv * 1000, Voc_div * 1000)
-            assert abs(self.input_errors['Jsc']
-                       ) < 0.1, "Provided Jsc disagree: {0:.0f} mA {1:.0f} mA".format(Jsc_liv * 1000, Jsc_iqe * 1000)
-        except:
-
-            self.err = sys.exc_info()
+        # some checks on the datas
+        assert abs(self.input_errors['Cell Area']
+                   ) < 0.01, "Provided sample area's disagrees: {0:.1f} cm^2 {1:.1f} cm^2".format(area_liv, area_div)
+        assert abs(self.input_errors['Cell thickness']
+                   ) < 0.01, "Provided sample thickness disagrees: {0:.4f} cm {1:.4f} cm".format(tck_user_input, tck_sunsVoc)
+        assert abs(self.input_errors['Voc']
+                   ) < 0.01, "Provided Voc disagree: {0:.0f} mV {1:.0f} mV".format(Voc_liv * 1000, Voc_div * 1000)
+        assert abs(self.input_errors['Jsc']
+                   ) < 0.1, "Provided Jsc disagree: {0:.0f} mA {1:.0f} mA".format(Jsc_liv * 1000, Jsc_iqe * 1000)
 
     def collect_outputs(self):
         '''Collects input and output parameters into self.output_list'''
