@@ -15,6 +15,7 @@ def AM15G_resample(wl):
                               usecols=(1,), skip_header=1)
     return np.interp(wl, AM15G_wl, AM15G_Jph)
 
+
 def find_nearest(x_val, xdata, ydata=None):
     '''
     TODO: check xdata and ydata are equal lengths
@@ -27,13 +28,15 @@ def find_nearest(x_val, xdata, ydata=None):
     else:
         return ydata[idx]
 
+
 def wl_to_alpha(given_wl):
     '''Returns alpha for a given wavelength in [nm] xxx? in Si'''
     alpha_data = np.genfromtxt(os.path.join(path_const, 'Si_alpha_Green_2008.dat'),
-                               usecols=(0,1), skip_header=1).transpose()
+                               usecols=(0, 1), skip_header=1).transpose()
     wl = alpha_data[0]
     alpha = alpha_data[1]
-    return np.interp (given_wl, wl, alpha)
+    return np.interp(given_wl, wl, alpha)
+
 
 def fit_Basore(wavelength, IQE, theta=0, wlbounds=(1040, 1100)):
     '''
@@ -63,8 +66,8 @@ def fit_Basore(wavelength, IQE, theta=0, wlbounds=(1040, 1100)):
     coefs = poly.polyfit(1. / alpha, 1. / IQE, 1)
 
     # xxx check these calcs
-    fit_output =  {'Leff': coefs[1],
-                   'eta_c': 1 / coefs[0]}
+    fit_output = {'Leff': coefs[1],
+                  'eta_c': 1 / coefs[0]}
 
     def plot_Basore_fit(ax):
         ax.plot(1. / alpha, 1. / IQE, '-o', label='data')
@@ -76,12 +79,14 @@ def fit_Basore(wavelength, IQE, theta=0, wlbounds=(1040, 1100)):
 
     return fit_output, plot_Basore_fit
 
+
 def Rs_calc_1(Vmp, Jmp, sunsVoc_V, sunsVoc_J):
     # TODO: not finished
 
     # sunsVoc method
     V_sunsVoc = find_nearest(Jmp, sunsVoc_J, sunsVoc_V)
     return (V_sunsVoc - Vmp) / Jmp
+
 
 def Rs_calc_2(Voc, Jsc, FF, pFF):
     '''
@@ -93,7 +98,8 @@ def Rs_calc_2(Voc, Jsc, FF, pFF):
     '''
     return Voc / Jsc * (1 - FF / pFF)
 
-def FF_ideal(Voc, Jsc = None, Rs = None, Rsh = None, T = 300):
+
+def FF_ideal(Voc, Jsc=None, Rs=None, Rsh=None, T=300):
     '''
     Calculates the ideal Fill Factor of a solar cell.
     Gives option to account for series and shunt resistance.
@@ -120,7 +126,7 @@ def FF_ideal(Voc, Jsc = None, Rs = None, Rsh = None, T = 300):
         rs = Rs / Voc * Jsc
         FFs = FFo * (1 - 1.1 * rs) + rs**2 / 5.4
     else:
-        #TODO: not sure if this is the best method?
+        # TODO: not sure if this is the best method?
         FFs = None
 
     # Rs -> finite,  Rsh -> finite
@@ -131,6 +137,7 @@ def FF_ideal(Voc, Jsc = None, Rs = None, Rsh = None, T = 300):
         FF = None
 
     return FFo, FFs, FF
+
 
 def FF_loss(Voc, Jsc, Vmp, Jmp, FFm, Rs, Rsh):
     '''
@@ -144,3 +151,18 @@ def FF_loss(Voc, Jsc, Vmp, Jmp, FFm, Rs, Rsh):
     FF_other = FFo - FFm - FF_Rs - FF_Rsh
 
     return FF_Rs, FF_Rsh, FF_other
+
+
+def ideality_factor(V, J, Vth):
+    '''
+    Calculates the ideality factor
+
+    This assumes that: $e^{V/mVt} >> 1$
+
+    This log form is used as it appears to be more robust against noise.
+
+    '''
+    with np.errstate(divide='ignore', invalid='ignore'):
+        m = 1. / Vth /\
+            np.gradient(np.log(J)) * np.gradient(V)
+    return m
