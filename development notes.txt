@@ -13,6 +13,18 @@ TODO:
 - return covariance for every fitting parameter?
 - easily compare different samples
 
+unittests
+
+from 'Loss-Analysis' directory, do:
+
+	python -m pytest
+
+- http://docs.python-guide.org/en/latest/writing/tests/
+- https://www.olivierverdier.com/posts/2015/04/10/testing-scientific-computing/
+- https://docs.scipy.org/doc/numpy-dev/reference/routines.testing.html
+- http://stackoverflow.com/questions/1896918/running-unittest-with-typical-test-directory-structure
+
+
 waterfall charts:
 - http://tooblippe.github.io/waterfall/
 - http://pbpython.com/waterfall-chart.html
