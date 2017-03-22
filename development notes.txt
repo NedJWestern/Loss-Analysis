@@ -3,9 +3,10 @@ NOTES:
   currently downsampling to the lowest possible resolution (?)
 
 TODO:
+- not sure where best to put some calculations, such as current loss analysis from QE
+- do doc strings only at end? To avoid updating with changes
 - see in-text TODOs
 - name for EQE_xxx_unnamed
-- write tests, at least for functions in analysis.py
 - add pie charts or waterfall plots for loss analysis
 - arbitrary input params, to plot against separately? (perhaps too much work)
 - create dependency tree for calculations (QE and IV are almost separate)
@@ -14,6 +15,7 @@ TODO:
 - easily compare different samples
 
 unittests
+- write for FF_delta_Rs / Rsh
 
 from 'Loss-Analysis' directory, do:
 
@@ -23,6 +25,8 @@ from 'Loss-Analysis' directory, do:
 - https://www.olivierverdier.com/posts/2015/04/10/testing-scientific-computing/
 - https://docs.scipy.org/doc/numpy-dev/reference/routines.testing.html
 - http://stackoverflow.com/questions/1896918/running-unittest-with-typical-test-directory-structure
+
+
 
 
 waterfall charts:
@@ -35,3 +39,11 @@ http://stackoverflow.com/questions/193161/what-is-the-best-project-structure-for
 http://as.ynchrono.us/2007/12/filesystem-structure-of-python-project_21.html
 https://airbrake.io/blog/python/python-best-practices
 
+
+------------------------------------------
+
+Conventions:
+
+doc strings
+
+- use 'numpydoc' format

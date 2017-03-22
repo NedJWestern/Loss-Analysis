@@ -17,13 +17,18 @@ Vth = constants.k * T / constants.e
 
 
 def waterfall(ax, y, xlabels=None):
+    '''
+    Create a waterfall plot. Assumes the first value is positive, all other
+    values are negative creating a 'waterfall' downwards.
+    '''
     y = np.array(y)
     x = np.arange(len(y))
     y_bot = np.append(0, y[:-1].cumsum())
     ax.bar(x, y, bottom=y_bot, align='center')
+    # ax.set_ylim(ymin = y_bot[-1] + y[-1])
     if xlabels is not None:
         ax.set_xticks(np.arange(len(xlabels)))
-        ax.set_xticklabels(xlabels)
+        ax.set_xticklabels(xlabels, rotation=40, ha='right')
 
     return ax
 
@@ -33,13 +38,17 @@ class Refl(object):
     def __init__(self, fname):
         self.load(fname)
 
-    def process(self, f_metal=None, wlbounds=(900, 1000)):
+    def process(self, f_metal=None, wlbounds=(900, 1000), wljunc=600):
         '''
         Performs several calculations including:
+        - Average Reflection (AR)
         - Weighted Average Reflection (WAR)
         - Light lost from front surface escape
         the results are loaded into attributes
         '''
+
+        # xxx need upper bound for this?
+        self.AR = np.trapz(self.refl, x=self.wl)
 
         self.AM15G_Jph = analysis.AM15G_resample(self.wl)
         i_upper = (self.wl <= 1000)
@@ -62,9 +71,21 @@ class Refl(object):
         self.refl_wo_escape = np.copy(self.refl)
         self.refl_wo_escape[index_l] = np.polyval(popt, self.wl[index_l])
 
-        Jloss = {}
-        Jloss['R'] = np.dot(self.refl, self.AM15G_Jph)
-        Jloss['R_wo_escape'] = np.dot(self.refl_wo_escape, self.AM15G_Jph)
+        # defined as area between 100% and the given curve, to simplify calculations
+        Jloss = OrderedDict()
+        Jloss['metal_shading'] = np.dot(self.f_metal * np.ones(len(self.AM15G_Jph)),
+                                        self.AM15G_Jph)
+        Jloss['refl_wo_escape'] = np.dot(self.refl_wo_escape, self.AM15G_Jph) \
+                                    - Jloss['metal_shading']
+        Jloss['front_escape'] = np.dot(self.refl, self.AM15G_Jph) \
+                                    - Jloss['metal_shading'] \
+                                    - Jloss['refl_wo_escape']
+        # this makes qe Jloss calculations easier
+        idx_junc = analysis.find_nearest(wljunc, self.wl)
+        Jloss['front_escape_blue'] = np.dot(self.refl[:idx_junc],
+                                            self.AM15G_Jph[:idx_junc])
+        Jloss['front_escape_red'] = np.dot(self.refl[idx_junc:],
+                                            self.AM15G_Jph[idx_junc:])
         self.Jloss = Jloss
 
     def plot(self, ax):
@@ -102,7 +123,7 @@ class QE(object):
     def __init__(self, fname):
         self.load(fname)
 
-    def process(self, wl, refl, refl_wo_escape):
+    def process(self, wl, refl, refl_wo_escape, Jloss, wljunc=600):
         '''
         Performs several calculations from QE and Reflectance data including:
         - IQE
@@ -120,6 +141,22 @@ class QE(object):
         self.EQE_xxx_unnamed = np.append(100 - refl_wo_escape[:idx],
                                          total_min[idx:])
 
+        AM15G_Jph = analysis.AM15G_resample(self.wl)
+        Jloss_qe = Jloss.copy()
+        del Jloss_qe['front_escape_red']
+        del Jloss_qe['front_escape_blue']
+        idx_junc = analysis.find_nearest(wljunc, self.wl)
+        Jloss_qe['parasitic_absorption'] = np.dot(100 - self.EQE_xxx_unnamed[idx_junc:],
+                                           AM15G_Jph[idx_junc:]) - Jloss['front_escape_red']
+        Jloss_qe['bulk_recomm'] = np.dot(100 - self.EQE[idx_junc:], AM15G_Jph[idx_junc:]) \
+                                  - Jloss['front_escape_red'] \
+                                  - Jloss_qe['parasitic_absorption']
+        Jloss_qe['blue_loss'] = np.dot(100 - self.EQE[:idx_junc], AM15G_Jph[:idx_junc]) \
+                                - Jloss['front_escape_blue']
+
+        self.Jloss_qe = Jloss_qe
+        # print(Jloss_qe)
+
     def plot_EQE(self, ax):
 
         line_EQE = ax.plot(self.wl, self.EQE, '-o', label='EQE')
@@ -127,7 +164,7 @@ class QE(object):
         ax.set_ylabel('QE [%]')
         ax.legend(loc='best')
         ax.grid(True)
-        return line_EQE     # currently not working
+        return line_EQE     # xxx currently not working
 
     def plot_IQE(self, ax):
         ax.plot(self.wl, self.IQE, '-o', label='IQE')
@@ -135,6 +172,9 @@ class QE(object):
         ax.set_ylabel('QE [%]')
         ax.legend(loc='best')
         ax.grid(True)
+
+    def plot_Jloss(self, ax):
+        waterfall(ax, list(self.Jloss_qe.values()), list(self.Jloss_qe.keys()))
 
     def load(self, raw_data_file):
         '''Loads EQE data into attributes'''
@@ -165,7 +205,7 @@ class IVLight(object):
         '''
         Light IV calculations
 
-        caculates the idea fill factors:
+        caculates the ideal fill factors:
 
         FF0
         FFs
@@ -189,26 +229,35 @@ class IVLight(object):
         self.m = analysis.ideality_factor(
             self.V, -1 * (self.J - self.output['Jsc']), Vth)
 
-        FFo, FFs, FF = analysis.FF_ideal(self.output['Voc'],
-                                         Jsc=self.output['Jsc'], Rs=Rs, Rsh=Rsh)
+        ideal_FF = OrderedDict()
+        ideal_FF['FF_0'] = analysis.ideal_FF(self.output['Voc'])
+        ideal_FF['FF_s'] = analysis.ideal_FF_series(self.output['Voc'],
+                                                    self.output['Jsc'],
+                                                    Rs)
+        ideal_FF['FF_s_sh'] = analysis.ideal_FF_series_shunt(self.output['Voc'],
+                                                             self.output['Jsc'],
+                                                             Rs, Rsh)
+        self.ideal_FF = ideal_FF
 
-        self.FF_vals = {}
-        self.FF_vals['FFo'] = FFo
-        self.FF_vals['FFs'] = FFs
-        self.FF_vals['FF'] = FF
+        FF_loss = OrderedDict()
+        FF_loss['FF_0'] = analysis.ideal_FF(self.output['Voc'])
+        FF_loss['FF_Rs'] = - analysis.FF_loss_series(self.output['Voc'],
+                                                        self.output['Jsc'],
+                                                        self.output['Jmp'],
+                                                        Rs)
+        FF_loss['FF_Rsh'] = - analysis.FF_loss_shunt(self.output['Voc'],
+                                                        self.output['Jsc'],
+                                                        self.output['Vmp'],
+                                                        self.output['Jmp'],
+                                                        Rs, Rsh)
 
-        FF_Rs, FF_Rsh, FF_other = analysis.FF_loss(self.output['Voc'],
-                                                   self.output['Jsc'],
-                                                   self.output['Vmp'],
-                                                   self.output['Jmp'],
-                                                   self.output['FF'],
-                                                   Rs, Rsh)
+        # for waterfall plot
+        FF_loss['FF_other'] = - (FF_loss['FF_0'] \
+                                      - self.output['FF'] \
+                                      - FF_loss['FF_Rs'] \
+                                      - FF_loss['FF_Rsh'])
 
-        self.FF_loss = OrderedDict()
-
-        self.FF_loss['FF_Rs'] = FF_Rs
-        self.FF_loss['FF_Rsh'] = FF_Rsh
-        self.FF_loss['FF_other'] = FF_other
+        self.FF_loss = FF_loss
 
     def plot(self, ax):
         '''
@@ -483,7 +532,7 @@ class Cell(object):
         delta = (Jsc_iqe - Jsc_liv) / Jsc_liv
         self.input_errors['Jsc'] = delta
 
-        # some checks on the datas
+        # some checks on the data
         assert abs(self.input_errors['Cell Area']
                    ) < 0.01, "Provided sample area's disagrees: {0:.1f} cm^2 {1:.1f} cm^2".format(area_liv, area_div)
         assert abs(self.input_errors['Cell thickness']
@@ -514,8 +563,6 @@ class Cell(object):
         quick_print('filename', self.refl.filename)
         quick_print('WAR', '{:.3f}'.format(self.refl.WAR))
         quick_print('f_metal', '{:.3f}'.format(self.refl.f_metal))
-        for key, val in self.refl.Jloss.items():
-            quick_print(key, '{:.3f}'.format(val))
 
         output_list.append('\n')
         quick_print('##### QE', '')
@@ -526,6 +573,8 @@ class Cell(object):
             self.qe.output_Basore_fit['Leff']))
         quick_print('Basore fit eta_c', '{:.3f}'.format(
             self.qe.output_Basore_fit['eta_c']))
+        # for key, val in self.qe.Jloss_qe.items():
+        #     quick_print(key, '{:.3f}'.format(val))
 
         output_list.append('\n')
         quick_print('##### Light IV', '')
@@ -553,7 +602,7 @@ class Cell(object):
         quick_print('Rs1', '{:.3e}'.format(self.Rs_1))
         quick_print('Rs2', '{:.3e}'.format(self.Rs_2))
 
-        for key, val in self.liv.FF_vals.items():
+        for key, val in self.liv.ideal_FF.items():
             quick_print(key, '{:.3f}'.format(val))
 
         self.output_list = output_list
@@ -631,13 +680,15 @@ class Cell(object):
         # line_EQE.set_marker('x')
         # self.refl.plot_QE(ax_QE_layered)
 
-        # for fill factor loss
-        fig_FF = plt.figure('FF', figsize=(30 / 2.54, 15 / 2.54))
-        fig_FF.clf()
+        # for loss analysis summary
+        fig_LA = plt.figure('LA', figsize=(30 / 2.54, 15 / 2.54))
+        fig_LA.clf()
 
-        ax_FF1 = fig_FF.add_subplot(2, 2, 1)
+        ax_FF = fig_LA.add_subplot(2, 2, 1)
+        ax_Jloss = fig_LA.add_subplot(2, 2, 2)
 
-        self.liv.plot_FF1(ax_FF1)
+        self.liv.plot_FF1(ax_FF)
+        self.qe.plot_Jloss(ax_Jloss)
 
         fig_QE.set_tight_layout(True)
         fig_IV.set_tight_layout(True)
@@ -665,7 +716,8 @@ class Cell(object):
 
         self.sunsVoc.process()
         self.refl.process()
-        self.qe.process(self.refl.wl, self.refl.refl, self.refl.refl_wo_escape)
+        self.qe.process(self.refl.wl, self.refl.refl, self.refl.refl_wo_escape,
+                        self.refl.Jloss)
         self.Rsh = self.div.process()
 
         self.Rs_1 = analysis.Rs_calc_1(self.liv.output['Vmp'],

@@ -38,7 +38,9 @@ def find_nearest(x_val, xdata, ydata=None):
 
 def wl_to_alpha(wavelength):
     '''
-    Returns the band to band absorption coefficient for Silicon given a wavelength. Linear interpolation is performed if the exact values are not provided.
+    Returns the band to band absorption coefficient for Silicon given a
+    wavelength. Linear interpolation is performed if the exact values are
+    not provided.
 
     The values are taken from Green 2008
     DOI:10.1016/j.solmat.2008.06.009
@@ -74,9 +76,13 @@ def fit_Basore(wavelength, IQE, theta=0, wlbounds=(1040, 1100)):
         IQE:    (array like)
                 the measured internal quantum efficiency in units %.
         theta: (float, optional)
-                The average angle the light travels through the sample. This can be used to partially correct for textured surfaces. The default is 0. In units of degrees,
+                The average angle the light travels through the sample.
+                This can be used to partially correct for textured surfaces.
+                The default is 0. In units of degrees,
         wlbounds: (tuple, optional)
-                The bounds between which the linear fit is performed. The first touple should be the min and then the max. The default is 1040 nm to 1100 nm.
+                The bounds between which the linear fit is performed.
+                The first touple should be the min and then the max.
+                The default is 1040 nm to 1100 nm.
     Returns:
         a tuple of
             a dictionary containing
@@ -128,137 +134,162 @@ def Rs_calc_2(Voc, Jsc, FF, pFF):
     '''
     return Voc / Jsc * (1 - FF / pFF)
 
-
-def FF_ideal(Voc, Jsc=None, Rs=None, Rsh=None, T=300):
-    '''
-    Calculates the ideal Fill Factor of a solar cell.
-    Gives option to account for series and shunt resistance.
-    Valid for:
-        Voc * q / k / T > 10
-        rs + 1 / rsh < 0.4
-    Accuracy:
-        FFo:  1e-4
-        FFs:  4e-3
-        FF:   3e-2
-
-    inputs:
-        Voc: (float)
-            The open circuit voltage of the device in volts
-        Jsc: (float, optional)
-            The short circuit current of the device in amps
-        Rs: (float, optional)
-            The lumped series resistance of the device in Ohms?
-        Rsh: (float, optional)
-            The lumped shunt resistor for the device in Ohms?
-        T: (float, optional)
-            The temperature, in Kelvin, of the device, the default is 300 K.
-
-    outputs:
-        FF0: The highest obtainable fill factor
-        FFs: The highest obtainable fill factor including the series resistance limit
-        FF:  The highest obtainable fill factor including the effects of series and shunt resistance.
-
-    Notes:
-    I've used Rs_2 because Rs_1 gave me artificially high FF
-
-    Source: Green, 1982
-    http://dx.doi.org/10.1016/0379-6787(82)90057-6
-    '''
-
-    if Rsh is not None:
-        # Rs -> finite,  Rsh -> 0
-        FF = _ideal_FF_shunt_series(Voc, T, Jsc, Rs, Rsh)
-    elif not (Jsc is None or Rs is None):
-        # Rs -> finite,  Rsh -> finite
-        FF = _ideal_FF_series(Voc, T, Jsc, Rs)
-    else:
-        # Rs -> infty,  Rsh -> 0
-        FF = _ideal_FF(Voc, T)
-
-    return FF
+def _Vth(T=None):
+    # this is here so it is the only place I need to define a default temperature
+    if T==None:
+        T=300
+    return constants.k * T / constants.e
 
 
-def _ideal_FF(Voc, T):
+def ideal_FF(Voc, T=None):
     '''
     Calculates the ideal fill factor.
 
     inputs:
         Voc: (float)
             Open circuit voltage in volts
-        T: (float)
-            Temperature in Kelvin
+        T: (float, optional)
+            Temperature in Kelvin, default of 300K
 
     output:
-        FF:
+        FF_0:
             The ideal fill factor
+
+    Valid for:
+        Voc * q / k / T > 10
+    Accuracy: 1e-4
+
+    Source: Green, 1982
+    http://dx.doi.org/10.1016/0379-6787(82)90057-6
     '''
-    voc = constants.e * Voc / constants.k / T
-    FF = (voc - np.log(voc + 0.72)) / (voc + 1)
-    return FF
+    voc = Voc / _Vth(T)
+    FF_0 = (voc - np.log(voc + 0.72)) / (voc + 1)
+    return FF_0
 
 
-def _ideal_FF_series(Voc, T, Jsc, Rs):
+def ideal_FF_series(Voc, Jsc, Rs, T=None):
     '''
     Calculates the ideal fill factor accounting for series resistance
 
         inputs:
             Voc: (float)
                 Open circuit voltage in volts
-            T: (float)
-                Temperature in Kelvin
             Jsc: (float)
                 The short circuit current in amps
             Rs: (float)
                 The series resistance in Ohms?
+            T: (float)
+                Temperature in Kelvin
 
         output:
-            FF:
-                The ideal fill factor
+            FF_s:
+                The ideal fill factor accounting for series resistance
+
+    Valid for:
+        Voc * q / k / T > 10
+        Rs * Jsc / Voc < 0.4
+    Accuracy: 4e-3
+
+    Source: Green, 1982
+    http://dx.doi.org/10.1016/0379-6787(82)90057-6
     '''
-    FF = _ideal_FF(Voc, T)
+    FF_0 = ideal_FF(Voc, T)
     rs = Rs / Voc * Jsc
-    FF = FF * (1 - 1.1 * rs) + rs**2 / 5.4
-    return FF
+    FF_s = FF_0 * (1 - 1.1 * rs) + rs**2 / 5.4
+    return FF_s
 
 
-def _ideal_FF_shunt_series(Voc, T, Jsc, Rs, Rsh):
+def ideal_FF_series_shunt(Voc, Jsc, Rs, Rsh, T=None):
     '''
     Calculates the ideal fill factor, accounting for shunt and series resistance.
     inputs:
         Voc: (float)
             Open circuit voltage in volts
-        T: (float)
-            Temperature in Kelvin
         Jsc: (float)
             The short circuit current in amps
         Rs: (float)
             The series resistance in Ohms?
         Rsh: (float)
             The shunt resistance in Ohms?
+        T: (float)
+            Temperature in Kelvin
+
     output:
-        FF:
-            The ideal fill factor
+        FF_sh_s:
+            The ideal fill factor accounting for shunt and series resistance
+
+    Valid for:
+        Voc * q / k / T > 10
+         < 0.4
+        Rs * Jsc / Voc + Voc / Rsh / Jsc < 0.4
+    Accuracy: 3e-2
+
+    Source: Green, 1982
+    http://dx.doi.org/10.1016/0379-6787(82)90057-6
     '''
-    FF = _ideal_FF_series(Voc, Jsc, Rs, T)
-    voc = constants.e * Voc / constants.k / T
+    FF_s = ideal_FF_series(Voc, Jsc, Rs, T)
+    voc = Voc / _Vth(T)
     rsh = Rsh / Voc * Jsc
-    FF = FF * (1 - (voc - 0.7) / voc * FF / rsh)
-    return FF
+    FF_s_sh = FF_s * (1 - (voc - 0.7) / voc * FF_s / rsh)
+    return FF_s_sh
 
 
-def FF_loss(Voc, Jsc, Vmp, Jmp, FFm, Rs, Rsh):
+def FF_loss_series(Voc, Jsc, Jmp, Rs):
     '''
-    Calculates the loss in fill factor from shunt and series resistance
-    TODO: check theory
-    '''
-    FF = FF_ideal(Voc)
+    Calculates the loss in fill factor from series resistance
 
+    inputs:
+        Voc: (float)
+            Open circuit voltage in [V]
+        Jsc: (float)
+            Short circuit current density in [A cm^{-1}]
+        Jmp: (float)
+            Maximum power point current density in [A cm^{-2}]
+        Rs: (float)
+            Series resistance in [Ohm cm^2]
+
+    output:
+        FF_Rs: (float)
+            The increase in fill factor expected by removing the series resistance
+            Dimensionless units
+
+    Source: Khanna, 2013
+    http://dx.doi.org/10.1109/JPHOTOV.2013.2270348
+    '''
     FF_Rs = Jmp**2 * Rs / (Voc * Jsc)
-    FF_Rsh = (Vmp + Rs * Jmp) / (Voc * Jsc * Rsh)
-    FF_other = FF - FFm - FF_Rs - FF_Rsh
 
-    return FF_Rs, FF_Rsh, FF_other
+    return FF_Rs
 
+
+def FF_loss_shunt(Voc, Jsc, Vmp, Jmp, Rs, Rsh):
+    '''
+    Calculates the loss in fill factor from shunt resistance
+
+    inputs:
+        Voc: (float)
+            Open circuit voltage in [V]
+        Jsc: (float)
+            Short circuit current density in [A cm^{-1}]
+        Vmp: (float)
+            Maximum power point voltage in [V]
+        Jmp: (float)
+            Maximum power point current density in [A cm^{-2}]
+        Rs: (float)
+            Series resistance in [Ohm cm^2]
+        Rsh: (float)
+            Shunt resistance in [Ohm cm^2]
+
+    output:
+        FF_Rs: (float)
+            The increase in fill factor expected by removing the series resistance
+            Dimensionless units
+
+    Source: Khanna, 2013
+    http://dx.doi.org/10.1109/JPHOTOV.2013.2270348
+    '''
+    FF_Rsh = (Vmp + Rs * Jmp)**2 / (Voc * Jsc * Rsh)
+
+    return FF_Rsh
 
 def ideality_factor(V, J, Vth):
     '''
