@@ -1,3 +1,4 @@
+
 import numpy as np
 from scipy import constants
 from scipy.optimize import curve_fit
@@ -134,10 +135,12 @@ def Rs_calc_2(Voc, Jsc, FF, pFF):
     '''
     return Voc / Jsc * (1 - FF / pFF)
 
+
 def _Vth(T=None):
-    # this is here so it is the only place I need to define a default temperature
-    if T==None:
-        T=300
+    # this is here so it is the only place I need to define a default
+    # temperature
+    if T == None:
+        T = 300
     return constants.k * T / constants.e
 
 
@@ -290,6 +293,7 @@ def FF_loss_shunt(Voc, Jsc, Vmp, Jmp, Rs, Rsh):
     FF_Rsh = (Vmp + Rs * Jmp)**2 / (Voc * Jsc * Rsh)
 
     return FF_Rsh
+
 
 def ideality_factor(V, J, Vth):
     '''

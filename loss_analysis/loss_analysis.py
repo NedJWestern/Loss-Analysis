@@ -71,21 +71,22 @@ class Refl(object):
         self.refl_wo_escape = np.copy(self.refl)
         self.refl_wo_escape[index_l] = np.polyval(popt, self.wl[index_l])
 
-        # defined as area between 100% and the given curve, to simplify calculations
+        # defined as area between 100% and the given curve, to simplify
+        # calculations
         Jloss = OrderedDict()
         Jloss['metal_shading'] = np.dot(self.f_metal * np.ones(len(self.AM15G_Jph)),
                                         self.AM15G_Jph)
         Jloss['refl_wo_escape'] = np.dot(self.refl_wo_escape, self.AM15G_Jph) \
-                                    - Jloss['metal_shading']
+            - Jloss['metal_shading']
         Jloss['front_escape'] = np.dot(self.refl, self.AM15G_Jph) \
-                                    - Jloss['metal_shading'] \
-                                    - Jloss['refl_wo_escape']
+            - Jloss['metal_shading'] \
+            - Jloss['refl_wo_escape']
         # this makes qe Jloss calculations easier
         idx_junc = analysis.find_nearest(wljunc, self.wl)
         Jloss['front_escape_blue'] = np.dot(self.refl[:idx_junc],
                                             self.AM15G_Jph[:idx_junc])
         Jloss['front_escape_red'] = np.dot(self.refl[idx_junc:],
-                                            self.AM15G_Jph[idx_junc:])
+                                           self.AM15G_Jph[idx_junc:])
         self.Jloss = Jloss
 
     def plot(self, ax):
@@ -147,12 +148,12 @@ class QE(object):
         del Jloss_qe['front_escape_blue']
         idx_junc = analysis.find_nearest(wljunc, self.wl)
         Jloss_qe['parasitic_absorption'] = np.dot(100 - self.EQE_xxx_unnamed[idx_junc:],
-                                           AM15G_Jph[idx_junc:]) - Jloss['front_escape_red']
+                                                  AM15G_Jph[idx_junc:]) - Jloss['front_escape_red']
         Jloss_qe['bulk_recomm'] = np.dot(100 - self.EQE[idx_junc:], AM15G_Jph[idx_junc:]) \
-                                  - Jloss['front_escape_red'] \
-                                  - Jloss_qe['parasitic_absorption']
+            - Jloss['front_escape_red'] \
+            - Jloss_qe['parasitic_absorption']
         Jloss_qe['blue_loss'] = np.dot(100 - self.EQE[:idx_junc], AM15G_Jph[:idx_junc]) \
-                                - Jloss['front_escape_blue']
+            - Jloss['front_escape_blue']
 
         self.Jloss_qe = Jloss_qe
         # print(Jloss_qe)
@@ -235,27 +236,28 @@ class IVLight(object):
                                                     self.output['Jsc'],
                                                     Rs)
         ideal_FF['FF_s_sh'] = analysis.ideal_FF_series_shunt(self.output['Voc'],
-                                                             self.output['Jsc'],
+                                                             self.output[
+                                                                 'Jsc'],
                                                              Rs, Rsh)
         self.ideal_FF = ideal_FF
 
         FF_loss = OrderedDict()
         FF_loss['FF_0'] = analysis.ideal_FF(self.output['Voc'])
         FF_loss['FF_Rs'] = - analysis.FF_loss_series(self.output['Voc'],
-                                                        self.output['Jsc'],
-                                                        self.output['Jmp'],
-                                                        Rs)
+                                                     self.output['Jsc'],
+                                                     self.output['Jmp'],
+                                                     Rs)
         FF_loss['FF_Rsh'] = - analysis.FF_loss_shunt(self.output['Voc'],
-                                                        self.output['Jsc'],
-                                                        self.output['Vmp'],
-                                                        self.output['Jmp'],
-                                                        Rs, Rsh)
+                                                     self.output['Jsc'],
+                                                     self.output['Vmp'],
+                                                     self.output['Jmp'],
+                                                     Rs, Rsh)
 
         # for waterfall plot
-        FF_loss['FF_other'] = - (FF_loss['FF_0'] \
-                                      - self.output['FF'] \
-                                      - FF_loss['FF_Rs'] \
-                                      - FF_loss['FF_Rsh'])
+        FF_loss['FF_other'] = - (FF_loss['FF_0']
+                                 - self.output['FF']
+                                 - FF_loss['FF_Rs']
+                                 - FF_loss['FF_Rsh'])
 
         self.FF_loss = FF_loss
 
