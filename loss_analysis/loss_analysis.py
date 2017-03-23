@@ -7,6 +7,8 @@ import os
 import re
 from collections import OrderedDict
 import matplotlib.pyplot as plt
+from matplotlib import rcParams
+import itertools
 import warnings
 # modules for this package
 import analysis
@@ -25,6 +27,10 @@ def waterfall(ax, y, xlabels=None):
     x = np.arange(len(y))
     y_bot = np.append(0, y[:-1].cumsum())
     ax.bar(x, y, bottom=y_bot, align='center')
+
+    # get rid of underscores from labels
+    xlabels = [i.replace('_', ' ') for i in xlabels]
+
     # ax.set_ylim(ymin = y_bot[-1] + y[-1])
     if xlabels is not None:
         ax.set_xticks(np.arange(len(xlabels)))
@@ -90,10 +96,12 @@ class Refl(object):
         self.Jloss = Jloss
 
     def plot(self, ax):
-        ax.plot(self.wl, self.refl, '-o')
-        ax.plot(self.wl, self.refl_wo_escape, '-o')
-        ax.plot(self.wl, np.ones(len(self.wl)) * self.f_metal, 'r-')
+        ax.plot(self.wl, self.refl, '-o', label='Total')
+        ax.plot(self.wl, self.refl_wo_escape, '-o', label='Front surface')
+        ax.plot(self.wl, np.ones(len(self.wl)) *
+                self.f_metal, 'r-', label='Metal')
         ax.set_ylabel('Reflectance [%]')
+        ax.legend(loc='best')
         ax.grid(True)
 
     def plot_QE(self, ax):
@@ -119,12 +127,24 @@ class Refl(object):
         self.refl = data_array[1, :]
 
 
+# class current_loss(object):
+#
+#     def __init__(self, qe, reflection):
+#
+#     def something(self):
+
+
 class QE(object):
+
+    wl = None
+    EQE = None
+    Jloss_qe = None
+    EQE_breakdown = None
 
     def __init__(self, fname):
         self.load(fname)
 
-    def process(self, wl, refl, refl_wo_escape, Jloss, wljunc=600):
+    def process(self, wl, refl, refl_wo_escape, Jloss, f_metal, wljunc=600):
         '''
         Performs several calculations from QE and Reflectance data including:
         - IQE
@@ -139,23 +159,62 @@ class QE(object):
         EQE_on_eta_c = self.EQE / self.output_Basore_fit['eta_c'] * 100
         idx = analysis.find_nearest(750, wl)
         total_min = np.minimum((100 - refl_wo_escape), EQE_on_eta_c)
+
         self.EQE_xxx_unnamed = np.append(100 - refl_wo_escape[:idx],
                                          total_min[idx:])
 
         AM15G_Jph = analysis.AM15G_resample(self.wl)
+
+        EQE_breakdown = {}
+
         Jloss_qe = Jloss.copy()
+        EQE_breakdown = OrderedDict()
+
+        EQE_breakdown['metal_reflection'] = f_metal * np.ones(self.wl.shape[0])
+        EQE_breakdown['front_reflection'] = (refl_wo_escape -
+                                             EQE_breakdown['metal_reflection'])
+
+        EQE_breakdown['front_escape'] = refl - refl_wo_escape
+
+        EQE_breakdown['front_escape'][EQE_breakdown['front_escape'] < 0] = 0
+        assert np.all(EQE_breakdown['front_escape'] >= 0)
+
+        EQE_breakdown['IQE_loss'] = (
+            100 - self.EQE - EQE_breakdown['front_escape'] - EQE_breakdown['front_reflection'] - EQE_breakdown['metal_reflection'])
+
+        # now some Jloss thing
         del Jloss_qe['front_escape_red']
         del Jloss_qe['front_escape_blue']
+
         idx_junc = analysis.find_nearest(wljunc, self.wl)
-        Jloss_qe['parasitic_absorption'] = np.dot(100 - self.EQE_xxx_unnamed[idx_junc:],
-                                                  AM15G_Jph[idx_junc:]) - Jloss['front_escape_red']
-        Jloss_qe['bulk_recomm'] = np.dot(100 - self.EQE[idx_junc:], AM15G_Jph[idx_junc:]) \
-            - Jloss['front_escape_red'] \
-            - Jloss_qe['parasitic_absorption']
-        Jloss_qe['blue_loss'] = np.dot(100 - self.EQE[:idx_junc], AM15G_Jph[:idx_junc]) \
-            - Jloss['front_escape_blue']
+
+        value = 100 - self.EQE
+        for key in EQE_breakdown.keys():
+            value -= EQE_breakdown[key]
+
+        Jloss_qe['parasitic_absorption'] = np.dot(
+            100 - self.EQE_xxx_unnamed[idx_junc:],
+            AM15G_Jph[idx_junc:]
+        ) - Jloss['front_escape_red']
+
+        value = 100 - self.EQE
+        for key in EQE_breakdown.keys():
+            value -= EQE_breakdown[key]
+
+        Jloss_qe['bulk_recomm'] = np.dot(
+            100 - self.EQE[idx_junc:],
+            AM15G_Jph[idx_junc:]) - Jloss['front_escape_red'] - Jloss_qe['parasitic_absorption']
+
+        value = 100 - self.EQE
+        for key in EQE_breakdown.keys():
+            value -= EQE_breakdown[key]
+
+        Jloss_qe['blue_loss'] = np.dot(
+            100 - self.EQE[:idx_junc], AM15G_Jph[:idx_junc]
+        ) - Jloss['front_escape_blue']
 
         self.Jloss_qe = Jloss_qe
+        self.EQE_breakdown = EQE_breakdown
         # print(Jloss_qe)
 
     def plot_EQE(self, ax):
@@ -173,6 +232,30 @@ class QE(object):
         ax.set_ylabel('QE [%]')
         ax.legend(loc='best')
         ax.grid(True)
+
+    def plot_EQE_breakdown(self, ax):
+        '''
+        Plots the EQE breakdown
+        '''
+        running_max = np.ones(self.wl.shape[0]) * 100
+
+        clist = rcParams['axes.color_cycle']
+        cgen = itertools.cycle(clist)
+
+        for break_down, value in self.EQE_breakdown.items():
+
+            c = next(cgen)
+            ax.fill_between(self.wl, running_max,
+                            running_max - value, facecolor=c)
+            ax.plot(np.inf, np.inf, c=c,
+                    label=break_down.replace('_', ' '))
+            running_max -= value
+
+        ax.set_ylim(0, 100)
+        ax.legend(loc='best')
+
+        print(running_max - self.EQE)
+        assert np.allclose(running_max, self.EQE)
 
     def plot_Jloss(self, ax):
         waterfall(ax, list(self.Jloss_qe.values()), list(self.Jloss_qe.keys()))
@@ -483,17 +566,30 @@ class IVDark(object):
 
 class Cell(object):
 
+    # data structures
+    refl = None
+    qe = None
+    sunsVoc = None
+    div = None
+    liv = None
+
     def __init__(self, thickness=None, **kwargs):
         self.thickness = thickness  # [cm]
         self.sample_names = {}
         self.input_errors = {}
-        self.refl = Refl(kwargs['reflectance_fname'])
-        self.qe = QE(kwargs['EQE_fname'])
-        self.sunsVoc = IVSuns(kwargs['suns Voc_fname'])
-        self.div = IVDark(kwargs['dark IV_fname'])
-        self.liv = IVLight(kwargs['light IV_fname'])
 
-        self.example_dir = os.path.join(os.pardir, 'example_cell')
+        if 'reflectance_fname' in kwargs:
+            self.refl = Refl(kwargs['reflectance_fname'])
+        if 'EQE_fname' in kwargs:
+            self.qe = QE(kwargs['EQE_fname'])
+        if 'suns Voc_fname' in kwargs:
+            self.sunsVoc = IVSuns(kwargs['suns Voc_fname'])
+        if 'dark IV_fname' in kwargs:
+            self.div = IVDark(kwargs['dark IV_fname'])
+        if 'light IV_fname' in kwargs:
+            self.liv = IVLight(kwargs['light IV_fname'])
+
+        # self.example_dir = os.path.join(os.pardir, 'example_cell')
 
         self.check_input_vals()
 
@@ -622,21 +718,33 @@ class Cell(object):
 
     def plot_all(self, save_fig_bool):
         '''Plot the output of previous calculations'''
+
         # for reflectance
+        fig_QE = self._plot_jsc_loss_measurements()
+        fig_IV = self._plot_FF_loss_measurements()
 
-        fig_QE = plt.figure('QE', figsize=(30 / 2.54, 15 / 2.54))
-        fig_QE.clf()
+        # for loss analysis summary
+        fig_LA = plt.figure('LA', figsize=(30 / 2.54, 15 / 2.54))
+        fig_LA.clf()
 
-        ax_refl = fig_QE.add_subplot(2, 2, 1)
-        ax_QE = fig_QE.add_subplot(2, 2, 2)
-        ax_QE_fit = fig_QE.add_subplot(2, 2, 3)
-        ax_QE_layered = fig_QE.add_subplot(2, 2, 4)
+        ax_FF = fig_LA.add_subplot(2, 2, 1)
+        ax_Jloss = fig_LA.add_subplot(2, 2, 2)
 
-        self.refl.plot(ax_refl)
-        self.refl.plot(ax_QE)
-        self.qe.plot_EQE(ax_QE)
-        self.qe.plot_IQE(ax_QE)
+        self.liv.plot_FF1(ax_FF)
+        self.qe.plot_Jloss(ax_Jloss)
 
+        fig_IV.set_tight_layout(True)
+
+        if save_fig_bool:
+
+            fig_QE.savefig(os.path.join(self.output_dir,
+                                        self.cell_name + '_QE.png'))
+            fig_IV.savefig(os.path.join(self.output_dir,
+                                        self.cell_name + '_IV.png'))
+
+        plt.show()
+
+    def _plot_FF_loss_measurements(self):
         # for light and dark IV
         fig_IV = plt.figure('IV', figsize=(30 / 2.54, 15 / 2.54))
         fig_IV.clf()
@@ -661,48 +769,56 @@ class Cell(object):
         self.div.plot_log_IV(ax_logIV)
         self.div.plot_m(ax_ideality)
 
+        return fig_IV
+
+    def _plot_jsc_loss_measurements(self):
+        '''
+        plots all the Jsc loss stuff
+        '''
+        # create a figure
+        fig_QE = plt.figure('QE', figsize=(30 / 2.54, 15 / 2.54))
+        fig_QE.clf()
+
+        ax_refl = fig_QE.add_subplot(2, 2, 1)
+        ax_QE = fig_QE.add_subplot(2, 2, 2)
+        ax_QE_fit = fig_QE.add_subplot(2, 2, 3)
+        ax_QE_layered = fig_QE.add_subplot(2, 2, 4)
+
+        # plot the stuff
+        self.refl.plot(ax_refl)
+        self.refl.plot(ax_QE)
+        self.qe.plot_EQE(ax_QE)
+        self.qe.plot_IQE(ax_QE)
+
         # plot the EQE fitted data
         self.qe.plot_Basore_fit(ax_QE_fit)
 
-        # this is doing some loss analysis filling
+        # this is doing some loss analysis filling, this should be in the EQE
+        # class and from this the losses calculated
         dummy_ones = np.ones(len(self.refl.wl))
-        ax_QE_layered.fill_between(self.refl.wl, dummy_ones * 100,
-                                   100 - dummy_ones * self.refl.f_metal,  color='blue')
-        ax_QE_layered.fill_between(self.refl.wl,
-                                   100 - dummy_ones * self.refl.f_metal,
-                                   100 - self.refl.refl_wo_escape, color='green')
-        ax_QE_layered.fill_between(self.refl.wl, 100 - self.refl.refl_wo_escape,
-                                   100 - self.refl.refl, color='red')
-        ax_QE_layered.fill_between(self.refl.wl, 100 - self.refl.refl,
-                                   self.qe.EQE_xxx_unnamed, color='cyan')
-        # ax_QE_layered.plot(self.refl.wl, self.qe.EQE_xxx_unnamed)
-        ax_QE_layered.fill_between(self.refl.wl, self.qe.EQE_xxx_unnamed,
-                                   self.qe.EQE, color='magenta')
+        self.qe.plot_EQE_breakdown(ax_QE_layered)
+        # ax_QE_layered.fill_between(self.refl.wl, dummy_ones * 100,
+        #                            100 - dummy_ones * self.refl.f_metal,  color='blue')
+        #
+        # ax_QE_layered.fill_between(self.refl.wl,
+        #                            100 - dummy_ones * self.refl.f_metal,
+        #                            100 - self.refl.refl_wo_escape, color='green')
+        #
+        # ax_QE_layered.fill_between(self.refl.wl, 100 - self.refl.refl_wo_escape,
+        #                            100 - self.refl.refl, color='red')
+        #
+        # ax_QE_layered.fill_between(self.refl.wl, 100 - self.refl.refl,
+        #                            self.qe.EQE_xxx_unnamed, color='cyan')
+        # # ax_QE_layered.plot(self.refl.wl, self.qe.EQE_xxx_unnamed)
+        # ax_QE_layered.fill_between(self.refl.wl, self.qe.EQE_xxx_unnamed,
+        #                            self.qe.EQE, color='magenta')
         # line_EQE, = self.qe.plot_EQE(ax_QE_layered)
         # line_EQE.set_marker('x')
         # self.refl.plot_QE(ax_QE_layered)
 
-        # for loss analysis summary
-        fig_LA = plt.figure('LA', figsize=(30 / 2.54, 15 / 2.54))
-        fig_LA.clf()
-
-        ax_FF = fig_LA.add_subplot(2, 2, 1)
-        ax_Jloss = fig_LA.add_subplot(2, 2, 2)
-
-        self.liv.plot_FF1(ax_FF)
-        self.qe.plot_Jloss(ax_Jloss)
-
         fig_QE.set_tight_layout(True)
-        fig_IV.set_tight_layout(True)
 
-        if save_fig_bool:
-
-            fig_QE.savefig(os.path.join(self.output_dir,
-                                        self.cell_name + '_QE.png'))
-            fig_IV.savefig(os.path.join(self.output_dir,
-                                        self.cell_name + '_IV.png'))
-
-        plt.show()
+        return fig_QE
 
     def process_all(self, save_fig_bool, output_dir, cell_name):
         '''
@@ -716,10 +832,38 @@ class Cell(object):
 
         self.output_dir = output_dir
 
-        self.sunsVoc.process()
+        self._jsc_loss()
+        self._FF_loss()
+
+        self.collect_outputs()
+        # self.print_output_to_file()
+        self.plot_all(save_fig_bool)
+
+    def _jsc_loss(self):
+        '''
+        A function that performs the calculations required for the calculation
+        of Jsc losses
+        '''
+
+        # make sure we have the required data types
+        assert self.refl is not None
+        assert self.qe is not None
+
+        # process that data
         self.refl.process()
         self.qe.process(self.refl.wl, self.refl.refl, self.refl.refl_wo_escape,
-                        self.refl.Jloss)
+                        self.refl.Jloss, self.refl.f_metal)
+
+    def _FF_loss(self):
+
+        # make sure we have the required data types
+        assert self.sunsVoc is not None
+        assert self.liv is not None
+        assert self.div is not None
+
+        # process the data
+        self.sunsVoc.process()
+
         self.Rsh = self.div.process()
 
         self.Rs_1 = analysis.Rs_calc_1(self.liv.output['Vmp'],
@@ -732,10 +876,6 @@ class Cell(object):
                                        self.sunsVoc.output['PFF'])
 
         self.liv.process(self.Rsh, self.Rs_1)
-
-        self.collect_outputs()
-        self.print_output_to_file()
-        self.plot_all(save_fig_bool)
 
 
 if __name__ == "__main__":

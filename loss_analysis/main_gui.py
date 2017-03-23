@@ -134,8 +134,6 @@ class LoadFiles(QWidget):
         self.back.clicked.connect(self.hide_widget)
         grid.addWidget(self.back, row_num + 1, 0)
 
-        # self.statusBar = QStatusBar()
-        # self.setStatusBar(self.statusBar)
         self.check_visability()
 
         self.setLayout(grid)
@@ -175,7 +173,19 @@ class LoadFiles(QWidget):
         self.hide_panel.emit()
 
     def process_data(self):
+        example_dir = os.path.join(os.path.dirname(
+            __file__), os.pardir, 'example_cell')
+        print(example_dir, '\n\n\n\n\n', os.path.dirname(
+            __file__))
+        files = {
+            'reflectance_fname': os.path.join(example_dir, 'example_reflectance.csv'),
+            'EQE_fname': os.path.join(example_dir, 'example_EQE.txt'),
+            'light IV_fname': os.path.join(example_dir, 'example_lightIV.lgt'),
+            'suns Voc_fname': os.path.join(example_dir, 'example_sunsVoc.xlsm'),
+            'dark IV_fname': os.path.join(example_dir, 'example_darkIV.drk')}
 
+        cell1 = loss_analysis.Cell(**files)
+        cell1.process_all(False, 'test', 'test')
         pass
 
 
