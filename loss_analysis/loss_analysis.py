@@ -13,6 +13,8 @@ import warnings
 # modules for this package
 import analysis
 from scipy import constants
+from data_loaders import QE
+
 
 T = 300   # TODO: make optional input?
 Vth = constants.k * T / constants.e
@@ -132,152 +134,166 @@ class Refl(object):
 #     def __init__(self, qe, reflection):
 #
 #     def something(self):
+def Voc_loss(Jo, Jsc):
+    J_auger = 10
+    Voc_auger = Vt * np.log(Jsc / J_auger + 1.)
+    Voc_auger = Vt * np.log(Jsc / (J_0 + surface) + 1.)
+
+    pass
 
 
-class QE(object):
+def changeinVoltage_delta(J0, dJ0):
+    return Vt / J0 * dJ0 / (1. + J0 / J)
 
-    wl = None
-    EQE = None
-    Jloss_qe = None
-    EQE_breakdown = None
 
-    def __init__(self, fname):
-        self.load(fname)
+def changeinVoltage(Voc, J0):
+    return Vt * np.ln(J / J0 + 1) - Voc
 
-    def process(self, wl, refl, refl_wo_escape, Jloss, f_metal, wljunc=600):
-        '''
-        Performs several calculations from QE and Reflectance data including:
-        - IQE
-        - Leff and SRV_rear
-        the results are saved into attributes
-        '''
-        self.IQE = 100 * self.EQE / (100 - refl)
 
-        self.output_Basore_fit, self.plot_Basore_fit = analysis.fit_Basore(
-            self.wl, self.IQE)
-
-        EQE_on_eta_c = self.EQE / self.output_Basore_fit['eta_c'] * 100
-        idx = analysis.find_nearest(750, wl)
-        total_min = np.minimum((100 - refl_wo_escape), EQE_on_eta_c)
-
-        self.EQE_xxx_unnamed = np.append(100 - refl_wo_escape[:idx],
-                                         total_min[idx:])
-
-        AM15G_Jph = analysis.AM15G_resample(self.wl)
-
-        EQE_breakdown = {}
-
-        Jloss_qe = Jloss.copy()
-        EQE_breakdown = OrderedDict()
-
-        EQE_breakdown['metal_reflection'] = f_metal * np.ones(self.wl.shape[0])
-        EQE_breakdown['front_reflection'] = (refl_wo_escape -
-                                             EQE_breakdown['metal_reflection'])
-
-        EQE_breakdown['front_escape'] = refl - refl_wo_escape
-
-        EQE_breakdown['front_escape'][EQE_breakdown['front_escape'] < 0] = 0
-        assert np.all(EQE_breakdown['front_escape'] >= 0)
-
-        EQE_breakdown['IQE_loss'] = (
-            100 - self.EQE - EQE_breakdown['front_escape'] - EQE_breakdown['front_reflection'] - EQE_breakdown['metal_reflection'])
-
-        # now some Jloss thing
-        del Jloss_qe['front_escape_red']
-        del Jloss_qe['front_escape_blue']
-
-        idx_junc = analysis.find_nearest(wljunc, self.wl)
-
-        value = 100 - self.EQE
-        for key in EQE_breakdown.keys():
-            value -= EQE_breakdown[key]
-
-        Jloss_qe['parasitic_absorption'] = np.dot(
-            100 - self.EQE_xxx_unnamed[idx_junc:],
-            AM15G_Jph[idx_junc:]
-        ) - Jloss['front_escape_red']
-
-        value = 100 - self.EQE
-        for key in EQE_breakdown.keys():
-            value -= EQE_breakdown[key]
-
-        Jloss_qe['bulk_recomm'] = np.dot(
-            100 - self.EQE[idx_junc:],
-            AM15G_Jph[idx_junc:]) - Jloss['front_escape_red'] - Jloss_qe['parasitic_absorption']
-
-        value = 100 - self.EQE
-        for key in EQE_breakdown.keys():
-            value -= EQE_breakdown[key]
-
-        Jloss_qe['blue_loss'] = np.dot(
-            100 - self.EQE[:idx_junc], AM15G_Jph[:idx_junc]
-        ) - Jloss['front_escape_blue']
-
-        self.Jloss_qe = Jloss_qe
-        self.EQE_breakdown = EQE_breakdown
-        # print(Jloss_qe)
-
-    def plot_EQE(self, ax):
-
-        line_EQE = ax.plot(self.wl, self.EQE, '-o', label='EQE')
-        ax.set_xlabel('Wavelength [$nm$]')
-        ax.set_ylabel('QE [%]')
-        ax.legend(loc='best')
-        ax.grid(True)
-        return line_EQE     # xxx currently not working
-
-    def plot_IQE(self, ax):
-        ax.plot(self.wl, self.IQE, '-o', label='IQE')
-        ax.set_xlabel('Wavelength [$nm$]')
-        ax.set_ylabel('QE [%]')
-        ax.legend(loc='best')
-        ax.grid(True)
-
-    def plot_EQE_breakdown(self, ax):
-        '''
-        Plots the EQE breakdown
-        '''
-        running_max = np.ones(self.wl.shape[0]) * 100
-
-        clist = rcParams['axes.color_cycle']
-        cgen = itertools.cycle(clist)
-
-        for break_down, value in self.EQE_breakdown.items():
-
-            c = next(cgen)
-            ax.fill_between(self.wl, running_max,
-                            running_max - value, facecolor=c)
-            ax.plot(np.inf, np.inf, c=c,
-                    label=break_down.replace('_', ' '))
-            running_max -= value
-
-        ax.set_ylim(0, 100)
-        ax.legend(loc='best')
-
-        print(running_max - self.EQE)
-        assert np.allclose(running_max, self.EQE)
-
-    def plot_Jloss(self, ax):
-        waterfall(ax, list(self.Jloss_qe.values()), list(self.Jloss_qe.keys()))
-
-    def load(self, raw_data_file):
-        '''Loads EQE data into attributes'''
-        self.filepath = raw_data_file
-        self.filename = os.path.basename(raw_data_file)
-
-        # the other columns are ignored
-        data_array = np.genfromtxt(raw_data_file, usecols=(0, 1),
-                                   skip_header=1, skip_footer=8)
-        self.wl = data_array[:, 0]
-        self.EQE = data_array[:, 1]
-
-        f = open(raw_data_file, 'r')
-        d = {}
-        for line in f.readlines()[-7:-1]:
-            d.update(dict([line.strip('\n').split(':')]))
-
-        d['Jsc'] = round(float(d['Jsc']) / 1e3, 7)
-        self.output = d
+# class QE(object):
+#
+#     wl = None
+#     EQE = None
+#     Jloss_qe = None
+#     EQE_breakdown = None
+#
+#     def __init__(self, fname):
+#         self.load(fname)
+#
+#     def process(self, wl, refl, refl_wo_escape, Jloss, f_metal, wljunc=600):
+#         '''
+#         Performs several calculations from QE and Reflectance data including:
+#         - IQE
+#         - Leff and SRV_rear
+#         the results are saved into attributes
+#         '''
+#         self.IQE = 100 * self.EQE / (100 - refl)
+#
+#         self.output_Basore_fit, self.plot_Basore_fit = analysis.fit_Basore(
+#             self.wl, self.IQE)
+#
+#         EQE_on_eta_c = self.EQE / self.output_Basore_fit['eta_c'] * 100
+#         idx = analysis.find_nearest(750, wl)
+#         total_min = np.minimum((100 - refl_wo_escape), EQE_on_eta_c)
+#
+#         self.EQE_xxx_unnamed = np.append(100 - refl_wo_escape[:idx],
+#                                          total_min[idx:])
+#
+#         AM15G_Jph = analysis.AM15G_resample(self.wl)
+#
+#         EQE_breakdown = {}
+#
+#         Jloss_qe = Jloss.copy()
+#         EQE_breakdown = OrderedDict()
+#
+#         EQE_breakdown['metal_reflection'] = f_metal * np.ones(self.wl.shape[0])
+#         EQE_breakdown['front_reflection'] = (refl_wo_escape -
+#                                              EQE_breakdown['metal_reflection'])
+#
+#         EQE_breakdown['front_escape'] = refl - refl_wo_escape
+#
+#         EQE_breakdown['front_escape'][EQE_breakdown['front_escape'] < 0] = 0
+#         assert np.all(EQE_breakdown['front_escape'] >= 0)
+#
+#         EQE_breakdown['IQE_loss'] = (
+#             100 - self.EQE - EQE_breakdown['front_escape'] - EQE_breakdown['front_reflection'] - EQE_breakdown['metal_reflection'])
+#
+#         # now some Jloss thing
+#         del Jloss_qe['front_escape_red']
+#         del Jloss_qe['front_escape_blue']
+#
+#         idx_junc = analysis.find_nearest(wljunc, self.wl)
+#
+#         value = 100 - self.EQE
+#         for key in EQE_breakdown.keys():
+#             value -= EQE_breakdown[key]
+#
+#         Jloss_qe['parasitic_absorption'] = np.dot(
+#             100 - self.EQE_xxx_unnamed[idx_junc:],
+#             AM15G_Jph[idx_junc:]
+#         ) - Jloss['front_escape_red']
+#
+#         value = 100 - self.EQE
+#         for key in EQE_breakdown.keys():
+#             value -= EQE_breakdown[key]
+#
+#         Jloss_qe['bulk_recomm'] = np.dot(
+#             100 - self.EQE[idx_junc:],
+#             AM15G_Jph[idx_junc:]) - Jloss['front_escape_red'] - Jloss_qe['parasitic_absorption']
+#
+#         value = 100 - self.EQE
+#         for key in EQE_breakdown.keys():
+#             value -= EQE_breakdown[key]
+#
+#         Jloss_qe['blue_loss'] = np.dot(
+#             100 - self.EQE[:idx_junc], AM15G_Jph[:idx_junc]
+#         ) - Jloss['front_escape_blue']
+#
+#         self.Jloss_qe = Jloss_qe
+#         self.EQE_breakdown = EQE_breakdown
+#         # print(Jloss_qe)
+#
+#     def plot_EQE(self, ax):
+#
+#         line_EQE = ax.plot(self.wl, self.EQE, '-o', label='EQE')
+#         ax.set_xlabel('Wavelength [$nm$]')
+#         ax.set_ylabel('QE [%]')
+#         ax.legend(loc='best')
+#         ax.grid(True)
+#         return line_EQE     # xxx currently not working
+#
+#     def plot_IQE(self, ax):
+#         ax.plot(self.wl, self.IQE, '-o', label='IQE')
+#         ax.set_xlabel('Wavelength [$nm$]')
+#         ax.set_ylabel('QE [%]')
+#         ax.legend(loc='best')
+#         ax.grid(True)
+#
+#     def plot_EQE_breakdown(self, ax):
+#         '''
+#         Plots the EQE breakdown
+#         '''
+#         running_max = np.ones(self.wl.shape[0]) * 100
+#
+#         clist = rcParams['axes.color_cycle']
+#         cgen = itertools.cycle(clist)
+#
+#         for break_down, value in self.EQE_breakdown.items():
+#
+#             c = next(cgen)
+#             ax.fill_between(self.wl, running_max,
+#                             running_max - value, facecolor=c)
+#             ax.plot(np.inf, np.inf, c=c,
+#                     label=break_down.replace('_', ' '))
+#             running_max -= value
+#
+#         ax.set_ylim(0, 100)
+#         ax.legend(loc='best')
+#
+#         print(running_max - self.EQE)
+#         assert np.allclose(running_max, self.EQE)
+#
+#     def plot_Jloss(self, ax):
+#         waterfall(ax, list(self.Jloss_qe.values()), list(self.Jloss_qe.keys()))
+#
+#     def load(self, raw_data_file):
+#         '''Loads EQE data into attributes'''
+#         self.filepath = raw_data_file
+#         self.filename = os.path.basename(raw_data_file)
+#
+#         # the other columns are ignored
+#         data_array = np.genfromtxt(raw_data_file, usecols=(0, 1),
+#                                    skip_header=1, skip_footer=8)
+#         self.wl = data_array[:, 0]
+#         self.EQE = data_array[:, 1]
+#
+#         f = open(raw_data_file, 'r')
+#         d = {}
+#         for line in f.readlines()[-7:-1]:
+#             d.update(dict([line.strip('\n').split(':')]))
+#
+#         d['Jsc'] = round(float(d['Jsc']) / 1e3, 7)
+#         self.output = d
 
 
 class IVLight(object):
@@ -581,7 +597,7 @@ class Cell(object):
         if 'reflectance_fname' in kwargs:
             self.refl = Refl(kwargs['reflectance_fname'])
         if 'EQE_fname' in kwargs:
-            self.qe = QE(kwargs['EQE_fname'])
+            self.qe = QE('PVInstruments_QEX10', kwargs['EQE_fname'])
         if 'suns Voc_fname' in kwargs:
             self.sunsVoc = IVSuns(kwargs['suns Voc_fname'])
         if 'dark IV_fname' in kwargs:
@@ -591,7 +607,7 @@ class Cell(object):
 
         # self.example_dir = os.path.join(os.pardir, 'example_cell')
 
-        self.check_input_vals()
+        # self.check_input_vals()
 
     def check_input_vals(self):
         '''
@@ -626,9 +642,9 @@ class Cell(object):
 
         # Jsc
         Jsc_liv = self.liv.output['Jsc']
-        Jsc_iqe = self.qe.output['Jsc']
-        delta = (Jsc_iqe - Jsc_liv) / Jsc_liv
-        self.input_errors['Jsc'] = delta
+        # Jsc_iqe = self.qe.output['Jsc']
+        # delta = (Jsc_iqe - Jsc_liv) / Jsc_liv
+        # self.input_errors['Jsc'] = delta
 
         # some checks on the data
         assert abs(self.input_errors['Cell Area']
@@ -664,13 +680,13 @@ class Cell(object):
 
         output_list.append('\n')
         quick_print('##### QE', '')
-        quick_print('filename', self.qe.filename)
-        for key, val in self.qe.output.items():
-            quick_print(key, val)
-        quick_print('Basore fit Leff', '{:.3e}'.format(
-            self.qe.output_Basore_fit['Leff']))
-        quick_print('Basore fit eta_c', '{:.3f}'.format(
-            self.qe.output_Basore_fit['eta_c']))
+        # quick_print('filename', self.qe.filename)
+        # for key, val in self.qe.output.items():
+        # quick_print(key, val)
+        # quick_print('Basore fit Leff', '{:.3e}'.format(
+        # self.qe.output_Basore_fit['Leff']))
+        # quick_print('Basore fit eta_c', '{:.3f}'.format(
+        # self.qe.output_Basore_fit['eta_c']))
         # for key, val in self.qe.Jloss_qe.items():
         #     quick_print(key, '{:.3f}'.format(val))
 
@@ -731,7 +747,7 @@ class Cell(object):
         ax_Jloss = fig_LA.add_subplot(2, 2, 2)
 
         self.liv.plot_FF1(ax_FF)
-        self.qe.plot_Jloss(ax_Jloss)
+        # self.qe.plot_Jloss(ax_Jloss)
 
         fig_IV.set_tight_layout(True)
 
@@ -787,16 +803,16 @@ class Cell(object):
         # plot the stuff
         self.refl.plot(ax_refl)
         self.refl.plot(ax_QE)
-        self.qe.plot_EQE(ax_QE)
-        self.qe.plot_IQE(ax_QE)
+        # self.qe.plot_EQE(ax_QE)
+        # self.qe.plot_IQE(ax_QE)
 
         # plot the EQE fitted data
-        self.qe.plot_Basore_fit(ax_QE_fit)
+        # self.qe.plot_Basore_fit(ax_QE_fit)
 
         # this is doing some loss analysis filling, this should be in the EQE
         # class and from this the losses calculated
         dummy_ones = np.ones(len(self.refl.wl))
-        self.qe.plot_EQE_breakdown(ax_QE_layered)
+        # self.qe.plot_EQE_breakdown(ax_QE_layered)
         # ax_QE_layered.fill_between(self.refl.wl, dummy_ones * 100,
         #                            100 - dummy_ones * self.refl.f_metal,  color='blue')
         #
@@ -832,12 +848,12 @@ class Cell(object):
 
         self.output_dir = output_dir
 
-        self._jsc_loss()
-        self._FF_loss()
+        # self._jsc_loss()
+        # self._FF_loss()
 
-        self.collect_outputs()
+        # self.collect_outputs()
         # self.print_output_to_file()
-        self.plot_all(save_fig_bool)
+        # self.plot_all(save_fig_bool)
 
     def _jsc_loss(self):
         '''
@@ -847,12 +863,12 @@ class Cell(object):
 
         # make sure we have the required data types
         assert self.refl is not None
-        assert self.qe is not None
+        # assert self.qe is not None
 
         # process that data
         self.refl.process()
-        self.qe.process(self.refl.wl, self.refl.refl, self.refl.refl_wo_escape,
-                        self.refl.Jloss, self.refl.f_metal)
+        # self.qe.process(self.refl.wl, self.refl.refl, self.refl.refl_wo_escape,
+        # self.refl.Jloss, self.refl.f_metal)
 
     def _FF_loss(self):
 
