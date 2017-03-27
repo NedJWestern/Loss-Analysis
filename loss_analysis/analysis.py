@@ -3,6 +3,7 @@ from scipy import constants
 from scipy.optimize import curve_fit
 import os
 from numpy.polynomial import polynomial as poly
+from scipy.special import lambertw
 
 # use absolute file path so tests work
 path_const = os.path.join(os.path.dirname(__file__), '..', 'constants')
@@ -134,10 +135,12 @@ def Rs_calc_2(Voc, Jsc, FF, pFF):
     '''
     return Voc / Jsc * (1 - FF / pFF)
 
-def _Vth(T=None):
-    # this is here so it is the only place I need to define a default temperature
-    if T==None:
-        T=300
+
+def _Vth(T):
+    # this is here so it is the only place I need to define a default
+    # temperature
+    # if T == None:
+        # T = 300
     return constants.k * T / constants.e
 
 
@@ -165,6 +168,37 @@ def ideal_FF(Voc, T=None):
     voc = Voc / _Vth(T)
     FF_0 = (voc - np.log(voc + 0.72)) / (voc + 1)
     return FF_0
+
+
+def ideal_FF_2016(Voc, T=None):
+    '''
+    Calculates the ideal fill factor.
+
+    inputs:
+        Voc: (float)
+            Open circuit voltage in volts
+        T: (float, optional)
+            Temperature in Kelvin, default of 300K
+
+    output:
+        FF_0:
+            The ideal fill factor
+
+    Valid for:
+        ??
+    Accuracy: ??
+
+    Source: Green, 2016
+    http://dx.doi.org/10.1063/1.4942660
+    '''
+
+    voc = Voc / _Vth(T)
+
+    z0 = np.exp(voc + 1)
+    # inverse f0
+    if0 = 1. - np.exp(-voc)
+    FF_0 = (lambertw(z0) - 1)**2 / if0 / voc / lambertw(z0)
+    return FF_0.real
 
 
 def ideal_FF_series(Voc, Jsc, Rs, T=None):
@@ -197,6 +231,45 @@ def ideal_FF_series(Voc, Jsc, Rs, T=None):
     rs = Rs / Voc * Jsc
     FF_s = FF_0 * (1 - 1.1 * rs) + rs**2 / 5.4
     return FF_s
+
+
+def ideal_FF_series_2016(Voc, Jsc, Rs, T=None):
+    '''
+    Calculates the ideal fill factor.
+
+    inputs:
+        Voc: (float)
+            Open circuit voltage in volts
+        T: (float, optional)
+            Temperature in Kelvin, default of 300K
+
+    output:
+        FF_0:
+            The ideal fill factor
+
+    Valid for:
+        ??
+    Accuracy: Approximately 4 digit accuracy is maintained in
+    technologically interesting cases, where losses are <5% for
+    normalised Voc>10.
+
+    Source: Green, 2016
+    http://dx.doi.org/10.1063/1.4942660
+    '''
+
+    FF_0 = ideal_FF_2016(Voc, T)
+    # normalised values
+    voc = Voc / _Vth(T)
+    rs = Rs / Voc * Jsc
+
+    # other factors
+    if0 = 1. - np.exp(-voc)
+    ifs = 1. - np.exp(-voc * (1 - rs))
+    z0 = np.exp(voc + 1)
+
+    # calculate it
+    FF_s = FF_0 * (1 - voc / lambertw(z0) * rs / if0) * if0 / ifs
+    return FF_s.real
 
 
 def ideal_FF_series_shunt(Voc, Jsc, Rs, Rsh, T=None):
@@ -232,6 +305,49 @@ def ideal_FF_series_shunt(Voc, Jsc, Rs, Rsh, T=None):
     rsh = Rsh / Voc * Jsc
     FF_s_sh = FF_s * (1 - (voc - 0.7) / voc * FF_s / rsh)
     return FF_s_sh
+
+
+def ideal_FF_shunt_2016(Voc, Rsh, T=None):
+    '''
+    Calculates the ideal fill factor, accounting for shunt and series resistance.
+    inputs:
+        Voc: (float)
+            Open circuit voltage in volts
+        Jsc: (float)
+            The short circuit current in amps
+        Rs: (float)
+            The series resistance in Ohms?
+        Rsh: (float)
+            The shunt resistance in Ohms?
+        T: (float)
+            Temperature in Kelvin
+
+    output:
+        FF_sh_s:
+            The ideal fill factor accounting for shunt and series resistance
+
+    Valid for:
+        Voc * q / k / T > 10
+         < 0.4
+        Rs * Jsc / Voc + Voc / Rsh / Jsc < 0.4
+    Accuracy: 3e-2
+
+    Source: Green, 1982
+    http://dx.doi.org/10.1016/0379-6787(82)90057-6
+    '''
+    FF_0 = ideal_FF_2016(Voc, T)
+    # normalised values
+    voc = Voc / _Vth(T)
+    rsh = Rsh / Voc * Jsc
+
+    # other factors
+    if0 = 1. - np.exp(-voc)
+    z0 = np.exp(voc + 1)
+
+    # calculate it
+    FF_sh = FF_0 * (1 - lambertw(z0) * if0 / voc /
+                    rsh / if0) / (1 - 1 / (voc * rsh))
+    return FF_sh.real
 
 
 def FF_loss_series(Voc, Jsc, Jmp, Rs):
@@ -291,6 +407,7 @@ def FF_loss_shunt(Voc, Jsc, Vmp, Jmp, Rs, Rsh):
 
     return FF_Rsh
 
+
 def ideality_factor(V, J, Vth):
     '''
     Calculates the ideality factor
@@ -303,3 +420,11 @@ def ideality_factor(V, J, Vth):
     with np.errstate(divide='ignore', invalid='ignore'):
         m = 1. / Vth / np.gradient(np.log(J)) * np.gradient(V)
     return m
+
+
+if __name__ == '__main__':
+    print(ideal_FF(0.6, 300))
+    print(ideal_FF_2016(0.6, 300))
+
+    print(ideal_FF_series_2016(0.6, 0.04, 1, 300))
+    print(ideal_FF_series(0.6, 0.04, 1, 300))
