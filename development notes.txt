@@ -7,10 +7,6 @@ TODO:
 - do doc strings only at end? To avoid updating with changes
 - see in-text TODOs
 - name for EQE_xxx_unnamed
-- add pie charts or waterfall plots for loss analysis
-- arbitrary input params, to plot against separately? (perhaps too much work)
-- create dependency tree for calculations (QE and IV are almost separate)
-- robust to having missing data?
 - return covariance for every fitting parameter?
 - easily compare different samples
 

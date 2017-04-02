@@ -18,14 +18,16 @@ Vth = constants.k * T / constants.e
 
 def waterfall(ax, y, xlabels=None):
     '''
-    Create a waterfall plot. Assumes the first value is positive, all other
-    values are negative creating a 'waterfall' downwards.
+    Create a waterfall plot.
+    Assumes the first value is the starting point,
+    all other values are set to negative creating a 'waterfall' downwards.
     '''
-    y = np.array(y)
+    y = abs(np.array(y))
+    y[1:] = -1 * y[1:]
     x = np.arange(len(y))
     y_bot = np.append(0, y[:-1].cumsum())
     ax.bar(x, y, bottom=y_bot, align='center')
-    # ax.set_ylim(ymin = y_bot[-1] + y[-1])
+    ax.set_ylim(ymin = y_bot[-1] + y[-1])
     if xlabels is not None:
         ax.set_xticks(np.arange(len(xlabels)))
         ax.set_xticklabels(xlabels, rotation=40, ha='right')
@@ -48,7 +50,7 @@ class Refl(object):
         '''
 
         # xxx need upper bound for this?
-        self.AR = np.trapz(self.refl, x=self.wl)
+        self.AR = np.trapz(self.refl / 100, x=self.wl)
 
         self.AM15G_Jph = analysis.AM15G_resample(self.wl)
         i_upper = (self.wl <= 1000)
@@ -73,18 +75,21 @@ class Refl(object):
 
         # defined as area between 100% and the given curve, to simplify calculations
         Jloss = OrderedDict()
-        Jloss['metal_shading'] = np.dot(self.f_metal * np.ones(len(self.AM15G_Jph)),
+        Jloss['max_limit'] = np.sum(self.AM15G_Jph)
+        Jloss['metal_shading'] = np.dot(self.f_metal / 100 \
+                                        * np.ones(len(self.AM15G_Jph)),
                                         self.AM15G_Jph)
-        Jloss['refl_wo_escape'] = np.dot(self.refl_wo_escape, self.AM15G_Jph) \
-                                    - Jloss['metal_shading']
-        Jloss['front_escape'] = np.dot(self.refl, self.AM15G_Jph) \
+        Jloss['refl_wo_escape'] = np.dot(self.refl_wo_escape / 100 \
+                                         , self.AM15G_Jph) \
+                                         - Jloss['metal_shading']
+        Jloss['front_escape'] = np.dot(self.refl / 100, self.AM15G_Jph) \
                                     - Jloss['metal_shading'] \
                                     - Jloss['refl_wo_escape']
         # this makes qe Jloss calculations easier
         idx_junc = analysis.find_nearest(wljunc, self.wl)
-        Jloss['front_escape_blue'] = np.dot(self.refl[:idx_junc],
+        Jloss['front_escape_blue'] = np.dot(self.refl[:idx_junc] / 100,
                                             self.AM15G_Jph[:idx_junc])
-        Jloss['front_escape_red'] = np.dot(self.refl[idx_junc:],
+        Jloss['front_escape_red'] = np.dot(self.refl[idx_junc:] / 100,
                                             self.AM15G_Jph[idx_junc:])
         self.Jloss = Jloss
 
@@ -128,14 +133,15 @@ class QE(object):
         Performs several calculations from QE and Reflectance data including:
         - IQE
         - Leff and SRV_rear
+        - Current loss from each region of the device
         the results are saved into attributes
         '''
-        self.IQE = 100 * self.EQE / (100 - refl)
+        self.IQE = self.EQE / (100 - refl)
 
         self.output_Basore_fit, self.plot_Basore_fit = analysis.fit_Basore(
             self.wl, self.IQE)
 
-        EQE_on_eta_c = self.EQE / self.output_Basore_fit['eta_c'] * 100
+        EQE_on_eta_c = self.EQE / self.output_Basore_fit['eta_c']
         idx = analysis.find_nearest(750, wl)
         total_min = np.minimum((100 - refl_wo_escape), EQE_on_eta_c)
         self.EQE_xxx_unnamed = np.append(100 - refl_wo_escape[:idx],
@@ -146,13 +152,16 @@ class QE(object):
         del Jloss_qe['front_escape_red']
         del Jloss_qe['front_escape_blue']
         idx_junc = analysis.find_nearest(wljunc, self.wl)
-        Jloss_qe['parasitic_absorption'] = np.dot(100 - self.EQE_xxx_unnamed[idx_junc:],
-                                           AM15G_Jph[idx_junc:]) - Jloss['front_escape_red']
-        Jloss_qe['bulk_recomm'] = np.dot(100 - self.EQE[idx_junc:], AM15G_Jph[idx_junc:]) \
+        Jloss_qe['parasitic_absorption'] = np.dot((100 - self.EQE_xxx_unnamed[idx_junc:]) / 100,
+                                           AM15G_Jph[idx_junc:]) \
+                                           - Jloss['front_escape_red']
+        Jloss_qe['bulk_recomm'] = np.dot((100 - self.EQE[idx_junc:]) / 100,
+                                         AM15G_Jph[idx_junc:]) \
                                   - Jloss['front_escape_red'] \
                                   - Jloss_qe['parasitic_absorption']
-        Jloss_qe['blue_loss'] = np.dot(100 - self.EQE[:idx_junc], AM15G_Jph[:idx_junc]) \
-                                - Jloss['front_escape_blue']
+        Jloss_qe['blue_loss'] = np.dot((100 - self.EQE[:idx_junc]) / 100,
+                                       AM15G_Jph[:idx_junc]) \
+                                       - Jloss['front_escape_blue']
 
         self.Jloss_qe = Jloss_qe
         # print(Jloss_qe)
@@ -241,18 +250,18 @@ class IVLight(object):
 
         FF_loss = OrderedDict()
         FF_loss['FF_0'] = analysis.ideal_FF(self.output['Voc'])
-        FF_loss['FF_Rs'] = - analysis.FF_loss_series(self.output['Voc'],
+        FF_loss['FF_Rs'] = analysis.FF_loss_series(self.output['Voc'],
                                                         self.output['Jsc'],
                                                         self.output['Jmp'],
                                                         Rs)
-        FF_loss['FF_Rsh'] = - analysis.FF_loss_shunt(self.output['Voc'],
+        FF_loss['FF_Rsh'] = analysis.FF_loss_shunt(self.output['Voc'],
                                                         self.output['Jsc'],
                                                         self.output['Vmp'],
                                                         self.output['Jmp'],
                                                         Rs, Rsh)
 
         # for waterfall plot
-        FF_loss['FF_other'] = - (FF_loss['FF_0'] \
+        FF_loss['FF_other'] = (FF_loss['FF_0'] \
                                       - self.output['FF'] \
                                       - FF_loss['FF_Rs'] \
                                       - FF_loss['FF_Rsh'])
@@ -549,22 +558,20 @@ class Cell(object):
 
         def quick_print(key, val):
             output_list.append('{:>30}, {:<20}'.format(key, val))
-
         output_list.append('\n')
+
         quick_print('##### Inputs check: Percentage difference', '',)
 
         for key, val in self.sample_names.items():
-            quick_print(key, '{:s}%'.format(val * 100))
+            quick_print(key, val)
         for key, val in self.input_errors.items():
             quick_print(key, '{:.3e}%'.format(val * 100))
-
         output_list.append('\n')
+
         quick_print('##### Reflectance', '')
         quick_print('filename', self.refl.filename)
-        quick_print('WAR', '{:.3f}'.format(self.refl.WAR))
-        quick_print('f_metal', '{:.3f}'.format(self.refl.f_metal))
-
         output_list.append('\n')
+
         quick_print('##### QE', '')
         quick_print('filename', self.qe.filename)
         for key, val in self.qe.output.items():
@@ -573,35 +580,43 @@ class Cell(object):
             self.qe.output_Basore_fit['Leff']))
         quick_print('Basore fit eta_c', '{:.3f}'.format(
             self.qe.output_Basore_fit['eta_c']))
-        # for key, val in self.qe.Jloss_qe.items():
-        #     quick_print(key, '{:.3f}'.format(val))
-
         output_list.append('\n')
+
         quick_print('##### Light IV', '')
         quick_print('filename', self.liv.filename)
         for key, val in self.liv.output.items():
             quick_print(key, val)
-
         output_list.append('\n')
+
         quick_print('##### Suns Voc', '')
         quick_print('filename', self.sunsVoc.filename)
         for key, val in self.sunsVoc.params.items():
             quick_print(key, val)
         for key, val in self.sunsVoc.output.items():
             quick_print(key, val)
-
         output_list.append('\n')
+
         quick_print('##### Dark IV', '')
         quick_print('filename', self.div.filename)
         for key, val in self.div.output.items():
             quick_print(key, val)
-
         output_list.append('\n')
-        quick_print('##### Calclated', '')
-        quick_print('Rsh', '{:.3e}'.format(self.Rsh))
-        quick_print('Rs1', '{:.3e}'.format(self.Rs_1))
-        quick_print('Rs2', '{:.3e}'.format(self.Rs_2))
 
+        quick_print('##### Calclated', '')
+        quick_print('### Reflectance', '')
+        quick_print('AR', '{:.3f}'.format(self.refl.AR))
+        quick_print('WAR', '{:.3f}'.format(self.refl.WAR))
+        quick_print('f_metal', '{:.3f}'.format(self.refl.f_metal))
+        quick_print('### Parasitic resistances', '')
+        quick_print('Rsh (Ohm cm2)', '{:.3e}'.format(self.Rsh))
+        quick_print('Rs1 (Ohm cm2)', '{:.3e}'.format(self.Rs_1))
+        quick_print('Rs2 (Ohm cm2)', '{:.3e}'.format(self.Rs_2))
+
+        quick_print('### Current losses', '')
+        for key, val in self.qe.Jloss_qe.items():
+            quick_print(key + ' (mA)', '{:.3f}'.format(val))
+
+        quick_print('### Fill Factor', '')
         for key, val in self.liv.ideal_FF.items():
             quick_print(key, '{:.3f}'.format(val))
 

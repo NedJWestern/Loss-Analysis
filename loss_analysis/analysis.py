@@ -10,12 +10,23 @@ path_const = os.path.join(os.path.dirname(__file__), '..', 'constants')
 
 
 def AM15G_resample(wl):
-    '''Returns AM1.5G spectrum at given wavelengths'''
+    '''
+    Returns AM1.5G spectrum at given wavelengths,
+    scaled to the new data interval (assumes even data spacing)
+    xxx is this the best way?
+
+    inputs:
+        wavelength: (array like)
+                the measured wavelengths in nanometers.
+    outputs:
+        current density per interval: (array like)
+    '''
+    interval = abs(wl[1] - wl[0])   # a ratio to 1nm (default)
     AM15G_wl = np.genfromtxt(os.path.join(path_const, 'AM1.5G_spectrum.dat'),
                              usecols=(0,), skip_header=1)
     AM15G_Jph = np.genfromtxt(os.path.join(path_const, 'AM1.5G_spectrum.dat'),
                               usecols=(1,), skip_header=1)
-    return np.interp(wl, AM15G_wl, AM15G_Jph)
+    return interval * np.interp(wl, AM15G_wl, AM15G_Jph)
 
 
 def find_nearest(x_val, xdata, ydata=None):
@@ -71,7 +82,7 @@ def fit_Basore(wavelength, IQE, theta=0, wlbounds=(1040, 1100)):
     This is just a linear fit over limited wavelengths
     Extracts an effective bulk diffusion length.
 
-    inputs:
+    Inputs:
         wavelength: (array like)
                 the measured wavelengths in nano meters.
         IQE:    (array like)
@@ -139,8 +150,8 @@ def Rs_calc_2(Voc, Jsc, FF, pFF):
 def _Vth(T):
     # this is here so it is the only place I need to define a default
     # temperature
-    # if T == None:
-        # T = 300
+    if T == None:
+        T = 300
     return constants.k * T / constants.e
 
 

@@ -153,6 +153,7 @@ class LossAnalysisGui(QWidget):
             la = loss_analysis.Cell(**files)
         except Exception as e:
             self.parent.statusBar().showMessage('Error:' + str(e))
+            # print(str(e))
         else:
             self.parent.statusBar().showMessage('Calculating losses')
 
@@ -186,7 +187,7 @@ class App(QMainWindow):
 
 if __name__ == '__main__':
 
-    logfile = open('traceback_log.txt', 'w')
+    # logfile = open('traceback.log', 'w')
     app = QApplication(sys.argv)
     # try:
     lag = App()
@@ -194,5 +195,5 @@ if __name__ == '__main__':
     # traceback.print_exc(file=logfile)
 
     lag.show()
-    logfile.close()
+    # logfile.close()
     sys.exit(app.exec_())
