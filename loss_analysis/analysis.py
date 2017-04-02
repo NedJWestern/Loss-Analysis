@@ -4,9 +4,35 @@ from scipy import constants
 from scipy.optimize import curve_fit
 import os
 from numpy.polynomial import polynomial as poly
+from collections import OrderedDict
 
 # use absolute file path so tests work
 path_const = os.path.join(os.path.dirname(__file__), '..', 'constants')
+
+
+def current_losses(wl, refl_total, refl_metal, refl_front, Jph, wljunc=600):
+
+    Jloss = OrderedDict()
+    Jloss['metal_shading'] = np.dot(refl_metal * np.ones(len(Jph)),
+                                    Jph)
+    Jloss['front_reflection'] = np.dot(refl_front, Jph) \
+        - Jloss['metal_shading']
+
+    Jloss['front_escape'] = np.dot(refl_total, Jph) \
+        - Jloss['metal_shading'] \
+        - Jloss['front_reflection']
+
+    Jloss['front_escape'] = np.dot(refl_total, Jph) \
+        - Jloss['metal_shading'] \
+        - Jloss['front_reflection']
+
+    # this makes qe Jloss calculations easier
+    idx_junc = find_nearest(wljunc, wl)
+    Jloss['front_escape_blue'] = np.dot(refl_total[:idx_junc],
+                                        Jph[:idx_junc])
+    Jloss['front_escape_red'] = np.dot(refl_total[idx_junc:],
+                                       Jph[idx_junc:])
+    return Jloss
 
 
 def AM15G_resample(wl):
@@ -107,7 +133,7 @@ def fit_Basore(wavelength, IQE, theta=0, wlbounds=(1040, 1100)):
                   'eta_c': 1 / coefs[0]}
 
     def plot_Basore_fit(ax):
-        ax.plot(1. / alpha, 1. / IQE, '-o', label='data')
+        ax.plot(1. / alpha, 1. / IQE, '.-', label='data')
         ax.plot(1. / alpha, poly.polyval(1. / alpha, coefs), label='fit_Basore')
         ax.set_xlabel('$1/ \\alpha$ [$cm^2$]')
         ax.set_ylabel('$1/IQE$ []')
@@ -293,17 +319,3 @@ def FF_loss_shunt(Voc, Jsc, Vmp, Jmp, Rs, Rsh):
     FF_Rsh = (Vmp + Rs * Jmp)**2 / (Voc * Jsc * Rsh)
 
     return FF_Rsh
-
-
-def ideality_factor(V, J, Vth):
-    '''
-    Calculates the ideality factor
-
-    This assumes that: $e^{V/mVt} >> 1$
-
-    This log form is used as it appears to be more robust against noise.
-
-    '''
-    with np.errstate(divide='ignore', invalid='ignore'):
-        m = 1. / Vth / np.gradient(np.log(J)) * np.gradient(V)
-    return m
