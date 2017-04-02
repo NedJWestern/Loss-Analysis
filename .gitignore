@@ -1,0 +1,4 @@
+**/__pycache__
+*.log
+*_loss_analysis_summary.csv
+*.png

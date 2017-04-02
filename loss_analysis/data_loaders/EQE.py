@@ -15,7 +15,7 @@ class QE():
 
     def plot_EQE(self, ax):
 
-        line_EQE = ax.plot(self.wl, self.EQE, '-o', label='EQE')
+        line_EQE = ax.plot(self.wl, self.EQE, '.-', label='EQE')
         ax.set_xlabel('Wavelength [$nm$]')
         ax.set_ylabel('QE [%]')
         ax.legend(loc='best')
