@@ -62,7 +62,7 @@ class IVLight():
         ax.set_ylim(ymin=0)
 
 loader_file_ext = {
-    'darkstar_UNSW': '.lgv',
+    'darkstar_UNSW': '.lgt',
 }
 
 

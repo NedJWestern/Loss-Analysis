@@ -127,17 +127,34 @@ def sinton(fname):
         V = data_array[:, 1][5:]
 
         # now just grabbing some other stuff from the excel
-        _params = [i.value for i in ws_User['A5':'F5'][0]]
-        vals = [i.value for i in ws_User['A6':'F6'][0]]
+        _params = []
+        for row in ws_User['A5':'F5']:
+            for cell in row:
+                _params.append(cell.value)
+
+        vals = []
+        for row in ws_User['A6':'F6']:
+            for cell in row:
+                vals.append(cell.value)
+
+        # vals = [cell.value for cell in row for row in list(ws_User['A6':'F6'])]
 
         params = dict(zip(_params, vals))
 
-        _params = [i.value for i in ws_User['A8':'L8'][0]]
+        _params = []
+        for row in ws_User['A8':'L8']:
+            for cell in row:
+                _params.append(cell.value)
         # Reduce 13 significant figures in .xlsx file to 6 (default of .format())
         # vals = [float('{:f}'.format(i.value)) for i in
         # ws_User['A6':'F6'][0]]
-        vals = [float('{:e}'.format(i.value))
-                for i in ws_User['A9':'L9'][0]]
+
+        vals = []
+        for row in ws_User['A9':'L9']:
+            for cell in row:
+                vals.append(float('{:e}'.format(cell.value)))
+
+
     other = dict(zip(params, vals))
     other.update(params)
     other['J'] = data_array[:, 2][5:]

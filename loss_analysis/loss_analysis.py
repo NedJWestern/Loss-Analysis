@@ -250,23 +250,35 @@ class Cell(object):
     div = None
     liv = None
 
+    losses_optical = None
+    losses_recombination = None
+
+
     def __init__(self, thickness=None, **kwargs):
         self.thickness = thickness  # [cm]
         self.sample_names = {}
         self.input_errors = {}
 
         if 'reflectance_fname' in kwargs:
-            self.refl = Refl('PerkinElma_lambda_1050',
-                             kwargs['reflectance_fname'])
+            self.refl = Refl(
+                kwargs['reflectance_loader'],
+                kwargs['reflectance_fname'])
         if 'EQE_fname' in kwargs:
-            self.qe = QE('PVInstruments_QEX10', kwargs['EQE_fname'])
+            self.qe = QE(
+                kwargs['EQE_loader'],
+                kwargs['EQE_fname'])
         if 'suns Voc_fname' in kwargs:
-            self.sunsVoc = IVSuns('sinton', kwargs['suns Voc_fname'])
+            self.sunsVoc = IVSuns(
+                kwargs['suns Voc_loader'],
+                kwargs['suns Voc_fname'])
         if 'dark IV_fname' in kwargs:
-            self.div = IVDark('darkstar_UNSW', kwargs['dark IV_fname'])
+            self.div = IVDark(kwargs['dark IV_loader'],
+                              kwargs['dark IV_fname'])
         if 'light IV_fname' in kwargs:
-            self.liv = IVLight('darkstar_UNSW', kwargs['light IV_fname'])
+            self.liv = IVLight(kwargs['light IV_loader'], kwargs[
+                               'light IV_fname'])
 
+        # print(kwargs)
         # self.example_dir = os.path.join(os.pardir, 'example_cell')
 
         # self.check_input_vals()
@@ -397,28 +409,39 @@ class Cell(object):
     def plot_all(self, save_fig_bool=False):
         '''Plot the output of previous calculations'''
 
-        # for reflectance
-        fig_QE = self._plot_jsc_loss_measurements()
-        fig_IV = self._plot_FF_loss_measurements()
+        # # for reflectance
+        # fig_QE = self._plot_jsc_loss_measurements()
+        # fig_IV = self._plot_FF_loss_measurements()
+        #
+        # # for loss analysis summary
+        # fig_LA = plt.figure('LA', figsize=(30 / 2.54, 15 / 2.54))
+        # fig_LA.clf()
+        #
+        # ax_FF = fig_LA.add_subplot(2, 2, 1)
+        # ax_Jloss = fig_LA.add_subplot(2, 2, 2)
+        #
+        # self.liv.plot_FF1(ax_FF)
+        # # self.qe.plot_Jloss(ax_Jloss)
+        #
+        # fig_IV.set_tight_layout(True)
+        #
+        # if save_fig_bool:
+        #
+        #     fig_QE.savefig(os.path.join(self.output_dir,
+        #                                 self.cell_name + '_QE.png'))
+        #     fig_IV.savefig(os.path.join(self.output_dir,
+        #                                 self.cell_name + '_IV.png'))
+        #
+        # plt.show()
+        pass
 
-        # for loss analysis summary
-        fig_LA = plt.figure('LA', figsize=(30 / 2.54, 15 / 2.54))
-        fig_LA.clf()
+    def plot_all2(self):
 
-        ax_FF = fig_LA.add_subplot(2, 2, 1)
-        ax_Jloss = fig_LA.add_subplot(2, 2, 2)
+        if None not in [self.liv, self.div, self.sunsVoc]:
+            self._plot_FF_losses()
 
-        self.liv.plot_FF1(ax_FF)
-        # self.qe.plot_Jloss(ax_Jloss)
-
-        fig_IV.set_tight_layout(True)
-
-        if save_fig_bool:
-
-            fig_QE.savefig(os.path.join(self.output_dir,
-                                        self.cell_name + '_QE.png'))
-            fig_IV.savefig(os.path.join(self.output_dir,
-                                        self.cell_name + '_IV.png'))
+        if None not in [self.refl, self.qe]:
+            self._plot_optical_loss_measurements()
 
         plt.show()
 
@@ -450,7 +473,8 @@ class Cell(object):
             self.div.plot_log_JV(ax_logIV)
             self.div.plot_mV(ax_ideality)
 
-        self.losses_recombination.plot_FF_loss(ax_FF)
+        if self.div is not None:
+            self.losses_recombination.plot_FF_loss(ax_FF)
         ax_lightIV.legend(loc='best')
 
         return fig_IV
@@ -470,38 +494,15 @@ class Cell(object):
 
         # plot the stuff
         self.refl.plot(ax_refl)
-        # self.refl.plot(ax_QE)
         self.qe.plot_EQE(ax_QE)
+
         self.losses_optical.plot_IQE(ax_QE)
         self.qe.plot_EQE(ax_QE_layered)
         self.losses_optical.plot_EQE_breakdown(ax_QE_layered)
         self.losses_optical.plot_Jloss(ax_QE_fit)
 
-        # plot the EQE fitted data
+        # plot the EQE fitted data ??
         # self.qe.plot_Basore_fit(ax_QE_fit)
-
-        # this is doing some loss analysis filling, this should be in the EQE
-        # class and from this the losses calculated
-        dummy_ones = np.ones(len(self.refl.wl))
-        # self.qe.plot_EQE_breakdown(ax_QE_layered)
-        # ax_QE_layered.fill_between(self.refl.wl, dummy_ones * 100,
-        #                            100 - dummy_ones * self.refl.f_metal,  color='blue')
-        #
-        # ax_QE_layered.fill_between(self.refl.wl,
-        #                            100 - dummy_ones * self.refl.f_metal,
-        #                            100 - self.refl.refl_wo_escape, color='green')
-        #
-        # ax_QE_layered.fill_between(self.refl.wl, 100 - self.refl.refl_wo_escape,
-        #                            100 - self.refl.refl, color='red')
-        #
-        # ax_QE_layered.fill_between(self.refl.wl, 100 - self.refl.refl,
-        #                            self.qe.EQE_xxx_unnamed, color='cyan')
-        # # ax_QE_layered.plot(self.refl.wl, self.qe.EQE_xxx_unnamed)
-        # ax_QE_layered.fill_between(self.refl.wl, self.qe.EQE_xxx_unnamed,
-        #                            self.qe.EQE, color='magenta')
-        # line_EQE, = self.qe.plot_EQE(ax_QE_layered)
-        # line_EQE.set_marker('x')
-        # self.refl.plot_QE(ax_QE_layered)
 
         fig_QE.set_tight_layout(True)
 
@@ -598,4 +599,4 @@ if __name__ == "__main__":
     cell1.process_all()
     cell1._plot_optical_loss_measurements()
     cell1._plot_FF_losses()
-    plt.show()
+    # plt.show()

@@ -5,18 +5,20 @@ from PyQt5.QtWidgets import (QWidget, QFileDialog, QPushButton, QTextEdit,
                              QGridLayout, QApplication, QLabel, QComboBox,
                              QCheckBox, QLineEdit, QStatusBar, QMainWindow)
 from PyQt5.QtCore import pyqtSignal
-# files for this package
+# files from this package
 import loss_analysis
+from data_loaders import div, EQE, liv, reflection, sunvoc
 
 
 class Measurement(QWidget):
 
-    def __init__(self, grid, meas_name, default_file, row, show_term):
+    def __init__(self, grid, meas_name, default_file, row, show_term, extensions):
         super().__init__()
 
         self.meas_name = meas_name
         # this is used to determine if a item should be shown
         self.show_term = show_term
+        self.extensions = extensions
 
         self.start_dir = os.path.join(os.pardir, 'example_cell')
         self.filepath = os.path.join(self.start_dir, default_file)
@@ -24,6 +26,7 @@ class Measurement(QWidget):
         _, self.file_ext = os.path.splitext(default_file)
 
         self._add_objects(grid, row)
+        self.loader = None
 
     def _add_objects(self, grid,  row):
         '''
@@ -42,25 +45,45 @@ class Measurement(QWidget):
         '''
         Gets and sets the label with the new file name
         '''
-        filter_str = '{0} file (*{1})'.format(self.meas_name, self.file_ext)
-        self.filepath = QFileDialog.getOpenFileName(self,
-                                                    'Choose {0} file'.format(
-                                                        self.meas_name),
-                                                    self.start_dir, filter_str)[0]
-        filename = os.path.basename(self.filepath)
-        self.label.setText(filename)
+        # filter_str = '{0} file (*{1})'.format(self.meas_name, self.file_ext)
+
+        filter_str = ''
+
+        for key in self.extensions.keys():
+            filter_str += ';;' + key + '( *' + self.extensions[key] + ')'
+
+        filter_str = filter_str.strip(';;')
+
+        Filter = ''
+        filepath, test = QFileDialog.getOpenFileName(self,
+                                                     'Choose {0} file'.format(
+                                                         self.meas_name),
+                                                     self.start_dir, filter_str, Filter)
+
+        if filepath:
+            self.filepath = filepath
+            filename = os.path.basename(filepath)
+            self.start_dir = os.path.dirname(self.filepath)
+            self.label.setText(filename)
+            self.loader = test.split('(')[0]
+            print('the loader used was', self.loader)
 
     def file(self):
         return {self.meas_name + '_fname': self.filepath}
 
-    def visability(self, term_dic):
 
-        self.btn.hide()
-        self.label.hide()
-        for term in self.show_term:
-            if term_dic[term]:
-                self.btn.show()
-                self.label.show()
+
+    def visability(self, term_dic=None):
+
+        if term_dic is not None:
+            self.btn.hide()
+            self.label.hide()
+            for term in self.show_term:
+                if term_dic[term]:
+                    self.btn.show()
+                    self.label.show()
+
+        return self.btn.isVisible()
 
 
 class LoadFiles(QWidget):
@@ -73,11 +96,12 @@ class LoadFiles(QWidget):
                  }
 
     boxes = [
-        ['reflectance', 'example_reflectance.csv', ['Jsc']],
-        ['EQE', 'example_EQE.txt', ['Jsc']],
-        ['light IV', 'example_lightIV.lgt', ['Voc', 'FF']],
-        ['suns Voc', 'example_sunsVoc.xlsm', ['FF']],
-        ['dark IV', 'example_darkIV.drk', ['FF']]
+        ['reflectance', 'example_reflectance.csv',
+            ['Jsc'], reflection.loader_file_ext],
+        ['EQE', 'example_EQE.txt', ['Jsc'], EQE.loader_file_ext],
+        ['light IV', 'example_lightIV.lgt', ['Voc', 'FF'], liv.loader_file_ext],
+        ['suns Voc', 'example_sunsVoc.xlsm', ['FF'], sunvoc.loader_file_ext],
+        ['dark IV', 'example_darkIV.drk', ['FF'], div.loader_file_ext]
     ]
 
     def __init__(self, parent):
@@ -113,7 +137,7 @@ class LoadFiles(QWidget):
 
         for row_num, box in enumerate(self.boxes):
             self.measurement.append(Measurement(grid, box[0], box[1],
-                                                row_num, box[2]))
+                                                row_num, box[2], box[3]))
 
         # save figures checkbox
         # self.cb_save_fig = QCheckBox('Save figures', self)
@@ -173,25 +197,37 @@ class LoadFiles(QWidget):
         self.hide_panel.emit()
 
     def process_data(self):
-        example_dir = os.path.join(os.path.dirname(
-            __file__), os.pardir, 'example_cell')
-        print(example_dir, '\n\n\n\n\n', os.path.dirname(
-            __file__))
-        files = {
-            'reflectance_fname': os.path.join(example_dir, 'example_reflectance.csv'),
-            'EQE_fname': os.path.join(example_dir, 'example_EQE.txt'),
-            'light IV_fname': os.path.join(example_dir, 'example_lightIV.lgt'),
-            'suns Voc_fname': os.path.join(example_dir, 'example_sunsVoc.xlsm'),
-            'dark IV_fname': os.path.join(example_dir, 'example_darkIV.drk')}
+
+        # files = {
+        #     'reflectance_fname': self.measurement
+        #      'example_reflectance.csv'),
+        #     'EQE_fname': os.path.join(example_dir, 'example_EQE.txt'),
+        #     'light IV_fname': os.path.join(example_dir, 'example_lightIV.lgt'),
+        #     'suns Voc_fname': os.path.join(example_dir, 'example_sunsVoc.xlsm'),
+        #     'dark IV_fname': os.path.join(example_dir, 'example_darkIV.drk')}
+        files = {}
+
+        for i in self.measurement:
+
+            if i.visability() is True:
+                files[i.meas_name + '_loader'] = i.loader
+                files[i.meas_name + '_fname'] = i.filepath
+
 
         cell1 = loss_analysis.Cell(**files)
         cell1.process_all(False, 'test', 'test')
+
+        fig = cell1.plot_all2()
+
         pass
 
 
 class LossOptions(QWidget):
 
     hide_panel = pyqtSignal()
+
+    loss_options = ['Voc loss', 'Jsc loss',  'FF loss', 'All losses']
+    loss_options = ['Jsc loss',  'FF loss', 'All losses']
 
     def __init__(self, parent):
         # super(LossAnalysisGui, self).__init__(parent)
@@ -203,10 +239,11 @@ class LossOptions(QWidget):
     def initUI(self):
 
         btns = []
-        labs = ['Jsc loss', 'Voc loss', 'FF loss', 'All losses']
-        for lab in labs:
+
+        for lab in self.loss_options:
             btns.append(QPushButton(lab))
             btns[-1].clicked.connect(self.loss)
+
         grid = QGridLayout()
         grid.setSpacing(1)
 
