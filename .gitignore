@@ -2,3 +2,4 @@
 *.log
 *_loss_analysis_summary.csv
 *.png
+*.pyc

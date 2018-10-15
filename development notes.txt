@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 NOTES:
 - not sure how to best to combine data with different wavelength resolutions,
   currently downsampling to the lowest possible resolution (?)
@@ -47,3 +48,50 @@ Conventions:
 doc strings
 
 - use 'numpydoc' format
+=======
+NOTES:
+- not sure how to best to combine data with different wavelength resolutions,
+  currently downsampling to the lowest possible resolution (?)
+
+TODO:
+- not sure where best to put some calculations, such as current loss analysis from QE
+- do doc strings only at end? To avoid updating with changes
+- see in-text TODOs
+- name for EQE_xxx_unnamed
+- return covariance for every fitting parameter?
+- easily compare different samples
+
+unittests
+- write for FF_delta_Rs / Rsh
+
+from 'Loss-Analysis' directory, do:
+
+	python -m pytest
+
+- http://docs.python-guide.org/en/latest/writing/tests/
+- https://www.olivierverdier.com/posts/2015/04/10/testing-scientific-computing/
+- https://docs.scipy.org/doc/numpy-dev/reference/routines.testing.html
+- http://stackoverflow.com/questions/1896918/running-unittest-with-typical-test-directory-structure
+
+
+
+
+waterfall charts:
+- http://tooblippe.github.io/waterfall/
+- http://pbpython.com/waterfall-chart.html
+
+
+notes on package structure:
+http://stackoverflow.com/questions/193161/what-is-the-best-project-structure-for-a-python-application
+http://as.ynchrono.us/2007/12/filesystem-structure-of-python-project_21.html
+https://airbrake.io/blog/python/python-best-practices
+
+
+------------------------------------------
+
+Conventions:
+
+doc strings
+
+- use 'numpydoc' format
+>>>>>>> fc225c7e556f3a85f741008a1aaa5341a6ea54f4
